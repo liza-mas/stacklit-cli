@@ -35,6 +35,9 @@ curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.
 
 # Custom install directory
 curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | INSTALL_DIR=<directory> sh
+
+# Custom source repo
+curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | STACKLIT_SOURCE_REPO=<git-url> sh
 ```
 
 From a local clone:
@@ -169,6 +172,8 @@ stacklit diff              # check if the index is stale
 
 `generate-json` automatically enriches the index from `stacklit-insights.json` when it exists. Use `--insights <file>` to read a different insights file; if that file is missing, Stacklit warns and continues without insights.
 
+With `--multi`, `-o <file>` changes the multi-index output path from `stacklit-multi.json` to the given file.
+
 <details>
 <summary>GitHub Action for auto-updates</summary>
 
@@ -253,12 +258,12 @@ stacklit derive -i stacklit.json # print compact nav map (~250 tokens)
   "ignore": ["vendor/", "generated/"],
   "max_depth": 3,
   "output": {
-    "json": "stacklit.json",
-    "mermaid": "DEPENDENCIES.md",
-    "html": "stacklit.html"
+    "json": "stacklit.json"
   }
 }
 ```
+
+`generate-json` and `diff` honor `output.json` when no explicit output/input flag is passed. Legacy `output.mermaid` and `output.html` keys may exist in older config files, but this CLI no longer exposes the old full-generation command that wrote `DEPENDENCIES.md` and configured HTML. `view` always writes `stacklit.html`.
 
 </details>
 
@@ -283,7 +288,9 @@ stacklit derive -i stacklit.json # print compact nav map (~250 tokens)
 }
 ```
 
-Create or refresh it with `stacklit init-insights`. Existing entries are preserved; pass `--prune` to remove purpose entries for modules that no longer exist. Generate the AI summary separately with `stacklit ai-summary`.
+Create or refresh it with `stacklit init-insights`. Existing entries are preserved; pass `--prune` to remove purpose entries for modules that no longer exist. If `stacklit.json` is missing, `init-insights` scans in memory and writes only the insights file.
+
+Generate the AI summary separately with `stacklit ai-summary`. By default it runs `claude -p`, sends the summary prompt on stdin, and stores stdout in `architecture.ai_summary`. Configure another local summary command with `STACKLIT_SUMMARY_CMD`, and adjust the timeout with `STACKLIT_SUMMARY_TIMEOUT`. `STACKLIT_SUMMARY_CMD` is split on whitespace, so use a wrapper script for complex quoted arguments.
 
 </details>
 

@@ -10,6 +10,7 @@ var Version = "dev"
 var rootCmd = &cobra.Command{
 	Use:               "stacklit",
 	Short:             "Generate a token-efficient codebase index for AI agents",
+	Long:              "Generate a token-efficient codebase index for AI agents.\n\nUsage details: https://github.com/liza-mas/stacklit-cli/blob/main/USAGE.md",
 	Version:           Version,
 	CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 }

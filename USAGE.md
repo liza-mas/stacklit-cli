@@ -20,6 +20,17 @@ curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.
 curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | INSTALL_DIR=<directory> sh
 ```
 
+Installer environment variables:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `BRANCH` | `main` | Git branch to clone and build |
+| `INSTALL_DIR` | `$HOME/.local/bin` | Directory for the installed `stacklit` binary |
+| `STACKLIT_REPO_OWNER` | `liza-mas` | GitHub owner used to build the default source URL |
+| `STACKLIT_REPO_NAME` | `stacklit-cli` | GitHub repo used to build the default source URL |
+| `STACKLIT_SOURCE_REPO` | `https://github.com/$STACKLIT_REPO_OWNER/$STACKLIT_REPO_NAME.git` | Full Git URL to clone |
+| `STACKLIT_SOURCE_TMPDIR` | `$TMPDIR` or `/tmp` | Parent directory for the temporary source checkout |
+
 From a local clone:
 
 ```bash
@@ -123,6 +134,8 @@ stacklit generate-json -o stacklit.json
 
 `generate-json` automatically enriches the index from `stacklit-insights.json` when that file exists. Use `--insights <file>` to read a different insights file; if that file is missing, Stacklit warns and continues without insights.
 
+With `--multi`, `generate-json` reads a plain text file of repo paths and writes a combined multi-repo index. The default output is `stacklit-multi.json`; pass `-o <file>` to choose a different multi-index path.
+
 ### Curate insights
 
 ```bash
@@ -132,6 +145,37 @@ stacklit generate-json
 ```
 
 `init-insights` creates or updates `stacklit-insights.json` with module purposes and hints while preserving existing edits. `ai-summary` updates `architecture.ai_summary` in the insights file.
+
+If `stacklit.json` is missing, `init-insights` runs the indexer in memory and creates `stacklit-insights.json` without writing `stacklit.json`. By default it preserves purpose entries for modules that no longer exist; use `--prune` to remove those stale purpose entries.
+
+### Configure AI summaries
+
+`ai-summary` reads `stacklit.json`, sends a compact architecture snapshot to a local summary command, and writes the command's stdout to `architecture.ai_summary` in `stacklit-insights.json`.
+
+By default, Stacklit runs:
+
+```bash
+claude -p
+```
+
+Override the command with `STACKLIT_SUMMARY_CMD`:
+
+```bash
+STACKLIT_SUMMARY_CMD="claude -p" stacklit ai-summary
+STACKLIT_SUMMARY_CMD="codex exec --ask-for-approval never" stacklit ai-summary
+```
+
+The prompt is passed on stdin. The command must write the summary to stdout.
+
+`STACKLIT_SUMMARY_CMD` is split on whitespace. Shell-style quoted arguments are not preserved, so prefer simple command lines or a small wrapper script for complex invocations.
+
+The timeout defaults to 120 seconds. Override it with `STACKLIT_SUMMARY_TIMEOUT`:
+
+```bash
+STACKLIT_SUMMARY_TIMEOUT=300 stacklit ai-summary
+```
+
+`ai-summary` uses this local CLI path; it does not call the direct Anthropic API helper.
 
 ### Check if the index is stale
 
@@ -184,14 +228,14 @@ Create `.stacklitrc.json` in your project root (optional):
   "max_modules": 150,
   "max_exports": 15,
   "output": {
-    "json": "stacklit.json",
-    "mermaid": "DEPENDENCIES.md",
-    "html": "stacklit.html"
+    "json": "stacklit.json"
   }
 }
 ```
 
-Keys: `ignore` (extra paths on top of `.gitignore`), `max_depth` (module detection depth, default 4), `max_modules` (collapse threshold, default 200), `max_exports` (per module, default 10), and `output` (override generated file names).
+Keys: `ignore` (extra paths on top of `.gitignore`), `max_depth` (module detection depth, default 4), `max_modules` (collapse threshold, default 200), `max_exports` (per module, default 10), and `output.json` (default JSON output path).
+
+`stacklit generate-json` and `stacklit diff` honor `output.json` when `-o` or `-i` is not passed. The legacy config keys `output.mermaid` and `output.html` may still be present in old config files, but this CLI no longer has the old full-generation command that wrote `DEPENDENCIES.md` and configured HTML. `stacklit view` always regenerates `stacklit.html` from an index.
 
 ---
 
@@ -204,10 +248,19 @@ Keys: `ignore` (extra paths on top of `.gitignore`), `max_depth` (module detecti
   "project": { "name": "my-app", "type": "monorepo" },
   "tech": {
     "primary_language": "typescript",
-    "frameworks": ["React", "Express"]
+    "frameworks": ["React", "Express"],
+    "framework_patterns": [
+      {
+        "name": "Express",
+        "routes": "routes/",
+        "entry": "server.js"
+      }
+    ]
   }
 }
 ```
+
+**framework_patterns** -- Optional framework-specific structure detected from config files, dependencies, and conventional directories. Fields can include `config_files`, `routes`, `api`, `middleware`, `models`, and `entry`.
 
 ### Modules
 
@@ -265,6 +318,10 @@ Each module represents a directory of related source files:
 ```
 
 Agent-actionable instructions generated from codebase analysis.
+
+### Query commands
+
+`find-module <query>` searches both module names and module purposes. Results are sorted by module name and capped at five matches so the output stays compact.
 
 ---
 
