@@ -1,3 +1,9 @@
+# IDE and editor directories
+.idea/
+.claude/
+.codex/
+*.iml
+
 # Build artifacts
 /stacklit
 dist/
@@ -21,3 +27,10 @@ coverage.out
 
 # Local docs (research, plans, specs — not for public repo)
 docs-local/
+
+# Symlinks to the contract
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+
+.worktrees/
