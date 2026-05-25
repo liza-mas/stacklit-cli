@@ -7,34 +7,41 @@
 Pick one:
 
 ```bash
-npx stacklit init              # easiest, downloads and runs automatically
-npm install -g stacklit        # install globally for repeated use
-go install github.com/glincker/stacklit/cmd/stacklit@latest  # if you have Go
+curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | sh
 ```
 
-Or download a binary from [Releases](https://github.com/glincker/stacklit/releases).
+Options:
+
+```bash
+# Build from a branch with caller-provided Go and make
+curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | BRANCH=<branch> sh
+
+# Custom install directory
+curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | INSTALL_DIR=<directory> sh
+```
+
+From a local clone:
+
+```bash
+make install
+stacklit --version
+```
+
+Use `INSTALL_DIR=<directory> make install` to install from a local clone into a custom directory.
+
+The installer builds from source and requires `git`, `go`, and `make`.
 
 ### 2. Generate your index
 
 ```bash
 cd your-project
-stacklit init
-```
-
-Output:
-
-```
-[stacklit] found 342 files
-[stacklit] parsed 342 files (0 errors)
-[stacklit] done in 89ms -- wrote stacklit.json, DEPENDENCIES.md, stacklit.html
-
-Opening visual map...
+stacklit generate-json -o stacklit.json
 ```
 
 ### 3. Commit the index
 
 ```bash
-git add stacklit.json DEPENDENCIES.md
+git add stacklit.json
 git commit -m "add stacklit codebase index"
 git push
 ```
@@ -46,18 +53,6 @@ git push
 **Claude Code** -- add to `CLAUDE.md`:
 ```
 Read stacklit.json before exploring files. Use modules to locate code, hints for conventions.
-```
-
-**Claude Desktop / Cursor** -- add to MCP config:
-```json
-{
-  "mcpServers": {
-    "stacklit": {
-      "command": "stacklit",
-      "args": ["serve"]
-    }
-  }
-}
 ```
 
 **Copilot** -- add to `.github/copilot-instructions.md`:
@@ -74,16 +69,8 @@ Read stacklit.json first to understand codebase structure before exploring files
 ### Regenerate after making changes
 
 ```bash
-stacklit generate
+stacklit generate-json -o stacklit.json
 ```
-
-Or automate it with a git hook:
-
-```bash
-stacklit init --hook
-```
-
-This adds a post-commit hook. Every commit auto-regenerates the index if source files changed. Docs-only changes are skipped (Merkle hash detection).
 
 ### Check if the index is stale
 
@@ -107,72 +94,16 @@ Regenerates `stacklit.html` and opens it in your browser.
 
 | Command | What it does |
 |---------|-------------|
-| `stacklit init` | Full scan, generate all outputs, open HTML |
-| `stacklit init --hook` | Same as init + install git post-commit hook |
-| `stacklit init --multi repos.txt` | Scan multiple repos listed in a file |
-| `stacklit generate` | Regenerate index from current source |
-| `stacklit generate --quiet` | Silent regeneration (for scripts, CI, hooks) |
-| `stacklit view` | Regenerate HTML and open in browser |
-| `stacklit diff` | Check if index is stale |
-| `stacklit serve` | Start MCP server for AI agent integration |
-| `stacklit derive` | Print compact navigation map (~250 tokens) to stdout |
-| `stacklit derive --inject claude` | Inject map into CLAUDE.md |
-| `stacklit derive --inject cursor` | Inject map into .cursorrules |
-| `stacklit export` | Print a readable markdown overview to stdout |
-| `stacklit export -o stacklit.md` | Write the markdown overview to a file |
-| `stacklit setup` | Auto-detect and configure all AI tools |
-| `stacklit setup claude` | Configure Claude Code (CLAUDE.md + MCP) |
-| `stacklit setup cursor` | Configure Cursor (.cursorrules + MCP) |
-| `stacklit setup aider` | Configure Aider (.aider.conf.yml) |
+| `stacklit generate-json -o stacklit.json` | Generate only the JSON index, quietly |
+| `stacklit find-module api -i stacklit.json` | Search modules in an index |
+| `stacklit get-module internal/cli -i stacklit.json` | Get full info for one module |
+| `stacklit get-dependencies internal/cli -i stacklit.json` | Get dependency edges for a module |
+| `stacklit get-hints -i stacklit.json` | Get workflow hints |
+| `stacklit get-hot-files -i stacklit.json` | Get git churn hotspots |
+| `stacklit view -i stacklit.json` | Regenerate HTML from an index and open in browser |
+| `stacklit diff -i stacklit.json` | Check if an index is stale |
+| `stacklit derive -i stacklit.json` | Print compact navigation map (~250 tokens) to stdout |
 | `stacklit --version` | Print version |
-
----
-
-## MCP server
-
-Start it:
-
-```bash
-stacklit serve
-```
-
-Seven tools available to your AI agent:
-
-| Tool | What it returns |
-|------|----------------|
-| `get_overview` | Full project summary: modules, language, frameworks, entrypoints |
-| `get_module` | One module: exports, types, dependencies, files, activity |
-| `find_module` | Search modules by keyword |
-| `list_modules` | All modules with name, purpose, files, lines |
-| `get_dependencies` | What a module depends on and what depends on it |
-| `get_hot_files` | Most-changed files in the last 90 days |
-| `get_hints` | Where to add features, test commands, env vars |
-
-The server auto-reloads when `stacklit.json` changes on disk.
-
----
-
-## Exporting to markdown
-
-`stacklit.json` is built for AI agents and tooling. When you want something a person can skim — a PR description, a GitHub issue, a Slack message — use the markdown export:
-
-```bash
-stacklit export                # print to stdout
-stacklit export -o stacklit.md # write to a file
-```
-
-The markdown contains:
-
-- A title with the project name, language, file count, and total lines
-- A language and framework summary table
-- Entrypoints and key directories (when present)
-- A modules table with purpose, size, and direct dependencies
-- Per-module collapsible `<details>` blocks listing exports and types
-- A dependency edge list, plus most-depended-on and isolated modules
-- Hot files from the last 90 days (when git data is present)
-- Hints: how to add a feature, the test command, env vars
-
-Output is deterministic: the same `stacklit.json` produces byte-identical markdown across runs and machines, so it's safe to commit.
 
 ---
 
@@ -290,20 +221,6 @@ Each workspace appears as a group of modules in the index.
 
 ---
 
-## Polyrepo scanning
-
-Scan multiple repos at once:
-
-```bash
-echo "/path/to/repo-a" > repos.txt
-echo "/path/to/repo-b" >> repos.txt
-stacklit init --multi repos.txt
-```
-
-Generates `stacklit-multi.json` with full module data for each repo plus cross-repo totals.
-
----
-
 ## CI/CD
 
 ### GitHub Action
@@ -313,7 +230,7 @@ name: Update stacklit index
 on:
   push:
     branches: [main]
-    paths-ignore: ['stacklit.json', 'DEPENDENCIES.md', '**.md']
+    paths-ignore: ['stacklit.json', '**.md']
 
 jobs:
   stacklit:
@@ -323,18 +240,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
-      - run: go install github.com/glincker/stacklit/cmd/stacklit@latest
-      - run: stacklit generate --quiet
+      - run: curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | sh
+      - run: stacklit generate-json
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update stacklit index"
-          file_pattern: "stacklit.json DEPENDENCIES.md"
+          file_pattern: "stacklit.json"
 ```
-
-### Pre-commit hook
-
-```bash
-stacklit init --hook
-```
-
-Regenerates on every commit. Skips if only docs/configs changed (Merkle hash detection).

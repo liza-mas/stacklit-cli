@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/glincker/stacklit/internal/config"
@@ -9,6 +11,65 @@ import (
 	"github.com/glincker/stacklit/internal/monorepo"
 	"github.com/glincker/stacklit/internal/parser"
 )
+
+func TestRunJSONOnlyWritesOnlyJSON(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+
+	result, err := Run(Options{
+		Root:       root,
+		Quiet:      true,
+		JSONOnly:   true,
+		JSONOutput: "custom-stacklit.json",
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if result.JSONPath != filepath.Join(root, "custom-stacklit.json") {
+		t.Fatalf("expected custom JSON path, got %q", result.JSONPath)
+	}
+	if _, err := os.Stat(result.JSONPath); err != nil {
+		t.Fatalf("expected JSON output to exist: %v", err)
+	}
+
+	for _, path := range []string{"DEPENDENCIES.md", "stacklit.html"} {
+		if _, err := os.Stat(filepath.Join(root, path)); !os.IsNotExist(err) {
+			t.Fatalf("expected %s not to be written, stat error: %v", path, err)
+		}
+	}
+}
+
+func TestRunJSONOnlyUsesConfiguredJSONOutputByDefault(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".stacklitrc.json"), []byte(`{"output":{"json":"custom-index.json"}}`), 0644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+
+	result, err := Run(Options{
+		Root:     root,
+		Quiet:    true,
+		JSONOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if result.JSONPath != filepath.Join(root, "custom-index.json") {
+		t.Fatalf("expected configured JSON path, got %q", result.JSONPath)
+	}
+	if _, err := os.Stat(result.JSONPath); err != nil {
+		t.Fatalf("expected configured JSON output to exist: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "stacklit.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected default stacklit.json not to be written, stat error: %v", err)
+	}
+}
 
 func TestAssembleIndexFiltersTrimmedModuleReferences(t *testing.T) {
 	files := []*parser.FileInfo{

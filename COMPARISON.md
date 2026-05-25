@@ -19,8 +19,6 @@ Different tools solve this differently. Some dump everything. Some build knowled
 | [code2prompt](https://github.com/mufeedvh/code2prompt) | 7k | Full dump + templates | Text | 50k-500k | Any | No | CLI (Rust) |
 | [files-to-prompt](https://github.com/simonw/files-to-prompt) | 2.6k | Concat files | XML | 50k-500k | Any | No | CLI (Python) |
 | [Aider repo-map](https://github.com/Aider-AI/aider) | 43k** | Tree-sitter + PageRank | Text | ~1k | 40+ | Yes | Locked to Aider |
-| [Codebase-Memory](https://github.com/DeusData/codebase-memory-mcp) | 1.4k | Knowledge graph | SQLite | 2k-10k/session | 66 | Yes (call graph) | MCP server (C) |
-| [Axon](https://github.com/harshkedia177/axon) | 648 | Graph + community detection | Neo4j/KuzuDB | 2k-10k/session | 3 | Yes (blast radius) | MCP server (Python) |
 | **[Stacklit](https://github.com/glincker/stacklit)** | -- | Tree-sitter + module map | JSON + HTML | **~250 (compact map)** | 11 | Yes | CLI (Go) |
 
 *Token cost = tokens consumed to give an agent full project context on a ~10k-line repo.
@@ -39,26 +37,13 @@ Concatenate all source files into one big prompt. Simple, works everywhere, but:
 
 Best for: Small repos (<5k lines), one-shot conversations, pasting into ChatGPT.
 
-### Knowledge Graphs (MCP Servers)
-**Codebase-Memory, Axon**
-
-Build a queryable graph of your codebase, served over MCP:
-- Rich structural data (call graphs, blast radius, community detection)
-- Requires running a server process
-- Each query costs tokens (tool call overhead)
-- No committable artifact  - the knowledge lives in the server
-
-Best for: Large codebases, long interactive sessions, teams with infra capacity.
-
 ### Structural Index (Stacklit)
 
 Parses code with tree-sitter, builds a module-level dependency graph, outputs a compact navigation map:
 - **~250 tokens** for the compact map (vs 50k-500k for dumpers)
 - Static artifact  - commit `stacklit.json` to your repo
 - Self-contained HTML visualization
-- Auto-configures Claude Code, Cursor, Aider via `stacklit setup`
-- Git hook keeps the index fresh
-- No running server needed for basic use (MCP server optional)
+- No running server needed
 
 Best for: Any repo, any AI tool, zero ongoing maintenance.
 
@@ -73,25 +58,23 @@ Built into IDEs, not standalone:
 
 ## Feature Matrix
 
-| Feature | Repomix | Aider | CB Memory | Axon | Stacklit |
-|---------|---------|-------|-----------|------|----------|
-| Zero config | Yes | Yes | Yes | No | Yes |
-| Tree-sitter parsing | Compress mode | Yes | Yes | Yes | Yes |
-| Dependency graph | No | Yes | Yes (call graph) | Yes | Yes |
-| Committable artifact | No* | No | No | No | **Yes** |
-| Visual output | No | No | No | Web UI (server) | **HTML (static)** |
-| MCP server | Yes | No | Yes | Yes | Yes |
-| Monorepo support | No | No | No | No | **Yes** |
-| Git activity tracking | No | No | Partial | Yes | Yes |
-| Compact map output | No | No | No | No | **Yes (~250 tokens)** |
-| Auto-configure agents | No | No | No | No | **Yes** |
-| Single binary, no deps | No (Node) | No (Python) | Yes (C) | No (Python) | Yes (Go) |
+| Feature | Repomix | Aider | Stacklit |
+|---------|---------|-------|----------|
+| Zero config | Yes | Yes | Yes |
+| Tree-sitter parsing | Compress mode | Yes | Yes |
+| Dependency graph | No | Yes | Yes |
+| Committable artifact | No* | No | **Yes** |
+| Visual output | No | No | **HTML (static)** |
+| Monorepo support | No | No | **Yes** |
+| Git activity tracking | No | No | Yes |
+| Compact map output | No | No | **Yes (~250 tokens)** |
+| Single binary, no deps | No (Node) | No (Python) | Yes (Go) |
 
 *Repomix output is too large to commit meaningfully.
 
 ## Real Token Counts
 
-Measured on real open-source projects using `stacklit init`:
+Measured on real open-source projects:
 
 | Repository | Files | Lines | Repomix (full) | Stacklit JSON | Stacklit Compact Map |
 |-----------|-------|-------|---------------|---------------|---------------------|
@@ -109,33 +92,21 @@ Repomix counts estimated from file sizes. Stacklit counts measured directly.
 - You're pasting into ChatGPT/Claude web
 - You want the simplest possible tool
 
-**Use Codebase-Memory if:**
-- You need call-graph-level detail
-- You're working on a very large codebase (100k+ lines)
-- You're comfortable running a background server
-
 **Use Stacklit if:**
 - You want your AI tools to understand your repo from token zero
 - You use multiple AI tools (Claude Code, Cursor, Aider)
-- You want zero maintenance (git hook auto-refreshes)
 - Token efficiency matters (pay-per-token or hitting context limits)
 - You want a visual dependency map you can share
 
 ## Install
 
 ```bash
-# npm (easiest - downloads the right binary automatically)
-npm i -g stacklit
+# Source install from main
+curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | sh
 
-# From source
-go install github.com/glincker/stacklit/cmd/stacklit@latest
+# From a local clone
+make install
 ```
 
-```bash
-# One command to set up everything
-stacklit setup
-```
-
----
 
 *This comparison is maintained by the Stacklit team. We aim to be accurate and fair. If you spot an error or want to add a tool, [open an issue](https://github.com/glincker/stacklit/issues).*

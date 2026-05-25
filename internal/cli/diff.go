@@ -13,6 +13,8 @@ import (
 )
 
 func newDiffCmd() *cobra.Command {
+	var input string
+
 	cmd := &cobra.Command{
 		Use:   "diff",
 		Short: "Show changes since last index generation",
@@ -21,12 +23,15 @@ func newDiffCmd() *cobra.Command {
 			cfg := config.Load(".")
 			indexPath := cfg.Output.JSON
 			if indexPath == "" {
-				indexPath = "stacklit.json"
+				indexPath = defaultIndexPath
+			}
+			if cmd.Flags().Changed("input") {
+				indexPath = input
 			}
 
 			data, err := os.ReadFile(indexPath)
 			if err != nil {
-				return fmt.Errorf("could not read %s: %w (run 'stacklit generate' first)", indexPath, err)
+				return fmt.Errorf("could not read %s: %w (run 'stacklit generate-json' first)", indexPath, err)
 			}
 
 			var index schema.Index
@@ -36,11 +41,12 @@ func newDiffCmd() *cobra.Command {
 
 			storedHash := index.MerkleHash
 			if storedHash == "" {
-				return fmt.Errorf("%s has no merkle_hash; run 'stacklit generate' to rebuild", indexPath)
+				return fmt.Errorf("%s has no merkle_hash; run 'stacklit generate-json' to rebuild", indexPath)
 			}
 
 			// 2. Walk current source files, excluding Stacklit's own generated outputs.
-			files, err := walker.Walk(".", cfg.ScanIgnore())
+			ignore := append(cfg.ScanIgnore(), indexPath)
+			files, err := walker.Walk(".", ignore)
 			if err != nil {
 				return fmt.Errorf("failed to walk source files: %w", err)
 			}
@@ -64,10 +70,12 @@ func newDiffCmd() *cobra.Command {
 			}
 
 			// 5. Hashes differ — report and suggest regeneration
-			fmt.Println("Source files changed since last generation. Run 'stacklit generate' to update.")
+			fmt.Println("Source files changed since last generation. Run 'stacklit generate-json' to update.")
 			return nil
 		},
 	}
+	cmd.Flags().StringVarP(&input, "input", "i", "", "Path to the stacklit JSON index (default: configured output.json)")
 	return cmd
 }
+
 // comment

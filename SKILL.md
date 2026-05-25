@@ -42,25 +42,22 @@ The file has these sections:
 - Do not re-explore the same repo every session. The index persists across sessions.
 - Do not ignore `most_depended` when planning changes. Those modules have the widest blast radius.
 
-## Using the MCP server
+## Using the CLI query commands
 
-If `stacklit serve` is running as an MCP server, use these tools instead of reading the file:
+Use these commands instead of manually searching the full JSON:
 
-- `get_overview` -- full project summary (call this first)
-- `get_module("src/auth")` -- detailed info on one module
-- `find_module("auth")` -- search modules by name
-- `get_dependencies("src/auth")` -- what it imports and what imports it
-- `get_hot_files` -- most-changed files (90 days)
-- `get_hints` -- conventions, test commands, env vars
-
-One `get_overview` call replaces reading 5-10 files to build context.
+- `stacklit get-module src/auth` -- detailed info on one module
+- `stacklit find-module auth` -- search modules by name or purpose
+- `stacklit get-dependencies src/auth` -- what it imports and what imports it
+- `stacklit get-hot-files` -- most-changed files (90 days)
+- `stacklit get-hints` -- conventions, test commands, env vars
 
 ## Keeping the index fresh
 
 If you have made significant structural changes (new modules, moved files, changed dependencies):
 
 ```bash
-stacklit generate
+stacklit generate-json -o stacklit.json
 ```
 
 Use `stacklit diff` to check if the index is stale before regenerating.
