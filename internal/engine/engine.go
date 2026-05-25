@@ -13,22 +13,24 @@ import (
 	"github.com/glincker/stacklit/internal/detect"
 	"github.com/glincker/stacklit/internal/git"
 	"github.com/glincker/stacklit/internal/graph"
+	"github.com/glincker/stacklit/internal/insights"
 	"github.com/glincker/stacklit/internal/monorepo"
 	"github.com/glincker/stacklit/internal/parser"
 	"github.com/glincker/stacklit/internal/renderer"
 	"github.com/glincker/stacklit/internal/schema"
-	"github.com/glincker/stacklit/internal/summary"
 	"github.com/glincker/stacklit/internal/walker"
 )
 
 // Options configures an engine Run.
 type Options struct {
-	Root       string
-	Workspace  string
-	Quiet      bool
-	Summary    bool
-	JSONOnly   bool
-	JSONOutput string
+	Root                string
+	Workspace           string
+	Quiet               bool
+	JSONOnly            bool
+	SkipWrite           bool
+	JSONOutput          string
+	InsightsPath        string
+	WarnMissingInsights bool
 }
 
 // Result holds the output paths and assembled index from a Run.
@@ -182,6 +184,28 @@ func detectTestCommand(root string) string {
 	return ""
 }
 
+func workspaceRelativeRoot(root, workspace string) string {
+	if workspace == "" {
+		return "."
+	}
+	workspaceRoot, err := filepath.Abs(workspace)
+	if err != nil {
+		return "."
+	}
+	rel, err := filepath.Rel(workspaceRoot, root)
+	if err != nil || rel == "" || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return "."
+	}
+	return filepath.ToSlash(rel)
+}
+
+func resolveRootPath(root, path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(root, path)
+}
+
 // Run executes the full stacklit pipeline and returns the result.
 func Run(opts Options) (*Result, error) {
 	start := time.Now()
@@ -246,21 +270,23 @@ func Run(opts Options) (*Result, error) {
 	}
 
 	// 8. Assemble schema.Index.
-	idx := assembleIndex(root, mono, files, parsed, g, activity, contents, cfg)
+	idx := assembleIndex(root, opts.Workspace, mono, files, parsed, g, activity, contents, cfg)
 
 	// 9. Compute Merkle hash.
 	idx.MerkleHash = git.ComputeMerkle(files, contents)
 
-	// 10. Generate AI summary if requested.
-	if opts.Summary {
-		if !opts.Quiet {
-			fmt.Println("[stacklit] generating AI summary...")
+	// 10. Apply curated insights if available.
+	if opts.InsightsPath != "" {
+		insightsPath := resolveRootPath(root, opts.InsightsPath)
+		file, found, insightErr := insights.LoadIfExists(insightsPath)
+		if insightErr != nil {
+			return nil, insightErr
 		}
-		text, summaryErr := summary.Run(idx)
-		if summaryErr != nil {
-			fmt.Printf("[stacklit] warning: summary failed: %v\n", summaryErr)
-		} else {
-			idx.Architecture = schema.Architecture{Summary: text}
+		if !found && opts.WarnMissingInsights {
+			fmt.Fprintf(os.Stderr, "[stacklit] warning: insights file %s not found; continuing without insights\n", insightsPath)
+		}
+		if found {
+			insights.Apply(idx, file)
 		}
 	}
 
@@ -268,6 +294,17 @@ func Run(opts Options) (*Result, error) {
 	jsonPath := filepath.Join(root, cfg.Output.JSON)
 	mmdPath := filepath.Join(root, cfg.Output.Mermaid)
 	htmlPath := filepath.Join(root, cfg.Output.HTML)
+
+	if opts.SkipWrite {
+		dur := time.Since(start)
+		return &Result{
+			JSONPath:    jsonPath,
+			HTMLPath:    htmlPath,
+			MermaidPath: mmdPath,
+			Index:       idx,
+			Duration:    dur,
+		}, nil
+	}
 
 	if err := renderer.WriteJSON(idx, jsonPath); err != nil {
 		return nil, fmt.Errorf("writing JSON: %w", err)
@@ -314,8 +351,13 @@ func Run(opts Options) (*Result, error) {
 
 // MultiOptions configures a RunMulti call.
 type MultiOptions struct {
-	ReposFile string
-	Quiet     bool
+	ReposFile           string
+	Quiet               bool
+	Workspace           string
+	JSONOnly            bool
+	OutputPath          string
+	InsightsPath        string
+	WarnMissingInsights bool
 }
 
 // MultiResult holds the output of a RunMulti call.
@@ -351,7 +393,14 @@ func RunMulti(opts MultiOptions) (*MultiResult, error) {
 		if !opts.Quiet {
 			fmt.Printf("[stacklit] scanning %s...\n", repo)
 		}
-		result, err := Run(Options{Root: repo, Quiet: true})
+		result, err := Run(Options{
+			Root:                repo,
+			Quiet:               true,
+			Workspace:           opts.Workspace,
+			JSONOnly:            opts.JSONOnly,
+			InsightsPath:        opts.InsightsPath,
+			WarnMissingInsights: opts.WarnMissingInsights,
+		})
 		if err != nil {
 			fmt.Printf("[stacklit] warning: failed to scan %s: %v\n", repo, err)
 			continue
@@ -363,7 +412,10 @@ func RunMulti(opts MultiOptions) (*MultiResult, error) {
 	multi := buildMultiIndex(indices)
 
 	// 5. Write to stacklit-multi.json in current directory.
-	outputPath := "stacklit-multi.json"
+	outputPath := opts.OutputPath
+	if outputPath == "" {
+		outputPath = "stacklit-multi.json"
+	}
 	multiData, err := json.MarshalIndent(multi, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshaling multi-index: %w", err)
@@ -413,6 +465,7 @@ func buildMultiIndex(indices []*schema.Index) *schema.MultiIndex {
 // assembleIndex builds a schema.Index from the pipeline outputs.
 func assembleIndex(
 	root string,
+	workspace string,
 	mono *monorepo.Result,
 	files []string,
 	parsed []*parser.FileInfo,
@@ -424,6 +477,7 @@ func assembleIndex(
 	// --- Project ---
 	projectName := filepath.Base(root)
 	projectType := mono.Type
+	projectRoot := workspaceRelativeRoot(root, workspace)
 
 	// --- Tech: count languages and collect imports ---
 	langStats := map[string]schema.LangStats{}
@@ -597,7 +651,7 @@ func assembleIndex(
 		Version: "1",
 		Project: schema.Project{
 			Name:       projectName,
-			Root:       ".",
+			Root:       projectRoot,
 			Type:       projectType,
 			Workspaces: workspaces,
 		},

@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/glincker/stacklit/internal/config"
@@ -71,6 +73,147 @@ func TestRunJSONOnlyUsesConfiguredJSONOutputByDefault(t *testing.T) {
 	}
 }
 
+func TestRunRecordsWorkspaceRelativeProjectRoot(t *testing.T) {
+	workspace := t.TempDir()
+	root := filepath.Join(workspace, "services", "api")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatalf("creating fixture root: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+
+	result, err := Run(Options{
+		Root:      root,
+		Workspace: workspace,
+		Quiet:     true,
+		JSONOnly:  true,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if result.Index.Project.Root != "services/api" {
+		t.Fatalf("expected workspace-relative project root, got %q", result.Index.Project.Root)
+	}
+}
+
+func TestRunAppliesInsights(t *testing.T) {
+	root := t.TempDir()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getting working directory: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("changing working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(wd); err != nil {
+			t.Fatalf("restoring working directory: %v", err)
+		}
+	})
+	moduleDir := filepath.Join(root, "internal", "engine")
+	if err := os.MkdirAll(moduleDir, 0755); err != nil {
+		t.Fatalf("creating module dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleDir, "engine.go"), []byte("package engine\n\nfunc Run() {}\n"), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "stacklit-insights.json"), []byte(`{
+  "purpose": {
+    "engine": "Curated indexing pipeline"
+  },
+  "hints": {
+    "test_command": "make test"
+  },
+  "architecture": {
+    "ai_summary": "Curated architecture summary"
+  }
+}`), 0644); err != nil {
+		t.Fatalf("writing insights: %v", err)
+	}
+
+	result, err := Run(Options{
+		Root:         root,
+		Quiet:        true,
+		JSONOnly:     true,
+		InsightsPath: "stacklit-insights.json",
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	foundPurpose := false
+	for _, mod := range result.Index.Modules {
+		if mod.Purpose == "Curated indexing pipeline" {
+			foundPurpose = true
+			break
+		}
+	}
+	if !foundPurpose {
+		t.Fatalf("expected curated purpose in modules, got %+v", result.Index.Modules)
+	}
+	if result.Index.Hints.TestCmd != "make test" {
+		t.Fatalf("expected curated test command, got %q", result.Index.Hints.TestCmd)
+	}
+	if result.Index.Architecture.Summary != "Curated architecture summary" {
+		t.Fatalf("expected curated summary, got %q", result.Index.Architecture.Summary)
+	}
+}
+
+func TestRunWarnsButContinuesWhenInsightsMissing(t *testing.T) {
+	root := t.TempDir()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getting working directory: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("changing working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(wd); err != nil {
+			t.Fatalf("restoring working directory: %v", err)
+		}
+	})
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+
+	stderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("creating stderr pipe: %v", err)
+	}
+	os.Stderr = w
+
+	result, runErr := Run(Options{
+		Root:                root,
+		Quiet:               true,
+		JSONOnly:            true,
+		InsightsPath:        "missing-insights.json",
+		WarnMissingInsights: true,
+	})
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("closing stderr pipe: %v", err)
+	}
+	os.Stderr = stderr
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("reading stderr: %v", err)
+	}
+
+	if runErr != nil {
+		t.Fatalf("Run returned error: %v", runErr)
+	}
+	if result == nil || result.Index == nil {
+		t.Fatal("expected index result")
+	}
+	if !strings.Contains(string(data), "warning: insights file") {
+		t.Fatalf("expected missing insights warning, got %q", string(data))
+	}
+}
+
 func TestAssembleIndexFiltersTrimmedModuleReferences(t *testing.T) {
 	files := []*parser.FileInfo{
 		{Path: "src/api/index.ts", Language: "TypeScript", Imports: []string{"src/auth", "src/db"}, LineCount: 50},
@@ -84,6 +227,7 @@ func TestAssembleIndexFiltersTrimmedModuleReferences(t *testing.T) {
 
 	idx := assembleIndex(
 		".",
+		"",
 		&monorepo.Result{Type: "single"},
 		[]string{"src/api/index.ts", "src/auth/service.ts", "src/db/pool.ts"},
 		files,

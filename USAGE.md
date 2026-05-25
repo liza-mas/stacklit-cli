@@ -38,17 +38,31 @@ cd your-project
 stacklit generate-json -o stacklit.json
 ```
 
-### 3. Commit the index
+### 3. Optional: create curated insights
 
 ```bash
-git add stacklit.json
+stacklit init-insights
+stacklit ai-summary
+stacklit generate-json
+```
+
+`init-insights` creates `stacklit-insights.json` from the current index. `ai-summary` adds an AI-generated architecture summary to that insights file. The final `generate-json` rebuilds `stacklit.json` enriched with the curated insights.
+
+Skip `ai-summary` if you do not want AI-generated summaries.
+
+### 4. Commit the index
+
+```bash
+git add stacklit.json stacklit-insights.json
 git commit -m "add stacklit codebase index"
 git push
 ```
 
+If you skipped insights, only add `stacklit.json`.
+
 `stacklit.html` is gitignored. It regenerates locally with `stacklit view`.
 
-### 4. Tell your AI tool about it
+### 5. Tell your AI tool about it
 
 **Claude Code** -- add to `CLAUDE.md`:
 ```
@@ -66,11 +80,58 @@ Read stacklit.json first to understand codebase structure before exploring files
 
 ## Daily use
 
+### Typical workflow
+
+First-time setup with insights:
+
+```bash
+stacklit generate-json
+stacklit init-insights
+stacklit ai-summary
+stacklit generate-json
+git add stacklit.json stacklit-insights.json
+git commit -m "add stacklit index"
+```
+
+Daily use after code changes:
+
+```bash
+stacklit generate-json
+stacklit diff
+```
+
+Refresh curated purposes and hints after module changes:
+
+```bash
+stacklit init-insights
+stacklit generate-json
+```
+
+Refresh the AI architecture summary:
+
+```bash
+stacklit generate-json
+stacklit ai-summary
+stacklit generate-json
+```
+
 ### Regenerate after making changes
 
 ```bash
 stacklit generate-json -o stacklit.json
 ```
+
+`generate-json` automatically enriches the index from `stacklit-insights.json` when that file exists. Use `--insights <file>` to read a different insights file; if that file is missing, Stacklit warns and continues without insights.
+
+### Curate insights
+
+```bash
+stacklit init-insights
+stacklit ai-summary
+stacklit generate-json
+```
+
+`init-insights` creates or updates `stacklit-insights.json` with module purposes and hints while preserving existing edits. `ai-summary` updates `architecture.ai_summary` in the insights file.
 
 ### Check if the index is stale
 
@@ -95,6 +156,11 @@ Regenerates `stacklit.html` and opens it in your browser.
 | Command | What it does |
 |---------|-------------|
 | `stacklit generate-json -o stacklit.json` | Generate only the JSON index, quietly |
+| `stacklit generate-json --insights stacklit-insights.json` | Enrich the generated index from an insights file |
+| `stacklit generate-json --workspace ..` | Record the repo root relative to a workspace root |
+| `stacklit generate-json --multi repos.txt` | Generate a combined `stacklit-multi.json` from repo paths |
+| `stacklit init-insights -i stacklit.json -o stacklit-insights.json` | Seed or update curated insights |
+| `stacklit ai-summary -i stacklit.json -o stacklit-insights.json` | Update the AI summary in the insights file |
 | `stacklit find-module api -i stacklit.json` | Search modules in an index |
 | `stacklit get-module internal/cli -i stacklit.json` | Get full info for one module |
 | `stacklit get-dependencies internal/cli -i stacklit.json` | Get dependency edges for a module |

@@ -160,8 +160,14 @@ Read stacklit.json before exploring files. Use modules to locate code, hints for
 
 ```bash
 stacklit generate-json -o stacklit.json  # only update the JSON index
+stacklit generate-json --workspace ..    # record the repo relative to a workspace root
+stacklit generate-json --multi repos.txt # write a combined stacklit-multi.json
+stacklit init-insights                   # create/update stacklit-insights.json
+stacklit ai-summary                      # update insights with an AI architecture summary
 stacklit diff              # check if the index is stale
 ```
+
+`generate-json` automatically enriches the index from `stacklit-insights.json` when it exists. Use `--insights <file>` to read a different insights file; if that file is missing, Stacklit warns and continues without insights.
 
 <details>
 <summary>GitHub Action for auto-updates</summary>
@@ -224,6 +230,11 @@ Any other language gets basic support (line count + language detection).
 
 ```
 stacklit generate-json -o stacklit.json  # generate only the JSON index
+stacklit generate-json --insights stacklit-insights.json # enrich from insights
+stacklit generate-json --workspace ..    # record the repo relative to a workspace root
+stacklit generate-json --multi repos.txt # generate stacklit-multi.json from repo paths
+stacklit init-insights -i stacklit.json -o stacklit-insights.json # seed curated insights
+stacklit ai-summary -i stacklit.json -o stacklit-insights.json    # update AI summary
 stacklit find-module api -i stacklit.json  # search modules in an index
 stacklit get-module internal/cli -i stacklit.json  # inspect one module
 stacklit get-dependencies internal/cli -i stacklit.json  # module dependency edges
@@ -251,6 +262,31 @@ stacklit derive -i stacklit.json # print compact nav map (~250 tokens)
 
 </details>
 
+<details>
+<summary>Curated insights (stacklit-insights.json)</summary>
+
+`stacklit-insights.json` stores stable semantic knowledge that should enrich the generated index: module purposes, workflow hints, and architecture summaries.
+
+```json
+{
+  "purpose": {
+    "internal/cli": "CLI commands and wiring",
+    "engine": "Index generation pipeline"
+  },
+  "hints": {
+    "add_feature": "Add commands in internal/cli and register them in root.go",
+    "test_command": "go test ./..."
+  },
+  "architecture": {
+    "ai_summary": "..."
+  }
+}
+```
+
+Create or refresh it with `stacklit init-insights`. Existing entries are preserved; pass `--prune` to remove purpose entries for modules that no longer exist. Generate the AI summary separately with `stacklit ai-summary`.
+
+</details>
+
 ## How it compares
 
 | Tool | Approach | Tokens | Committable | Visual map |
@@ -273,7 +309,7 @@ Repomix concatenates all files into one prompt (50k-500k tokens). Stacklit parse
 ## FAQ
 
 **Does Stacklit read my code?**
-Yes, locally. It parses source files with tree-sitter to extract structure (imports, exports, types). No code is sent anywhere unless you use the optional `--summary` flag (which calls the Claude API).
+Yes, locally. It parses source files with tree-sitter to extract structure (imports, exports, types). No code is sent anywhere unless you run `stacklit ai-summary`, which invokes the configured summary CLI.
 
 **What if my language isn't supported?**
 Stacklit falls back to basic support (line count + language detection) for any language not in the tree-sitter list. The module map, dependency graph, and git activity still work.
