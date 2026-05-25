@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/glincker/stacklit/internal/jsonfile"
 	"github.com/glincker/stacklit/internal/schema"
 )
 
@@ -47,11 +48,10 @@ func LoadIfExists(path string) (*File, bool, error) {
 
 func Write(path string, file *File) error {
 	ensurePurpose(file)
-	data, err := json.MarshalIndent(file, "", "  ")
+	data, err := jsonfile.MarshalIndent(file)
 	if err != nil {
 		return fmt.Errorf("marshaling insights: %w", err)
 	}
-	data = append(data, '\n')
 
 	if dir := filepath.Dir(path); dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {

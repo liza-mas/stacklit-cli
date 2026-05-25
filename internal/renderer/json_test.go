@@ -54,6 +54,9 @@ func TestWriteJSON(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("output is not valid JSON: %v", err)
 	}
+	if raw[len(raw)-1] != '\n' {
+		t.Fatalf("output should end with newline, got final byte %q", raw[len(raw)-1])
+	}
 
 	// $schema is set
 	if decoded.Schema != schemaURL {

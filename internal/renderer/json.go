@@ -2,10 +2,10 @@ package renderer
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"time"
 
+	"github.com/glincker/stacklit/internal/jsonfile"
 	"github.com/glincker/stacklit/internal/schema"
 )
 
@@ -20,7 +20,7 @@ func WriteJSON(idx *schema.Index, path string) error {
 	idx.StacklitVersion = version
 	preserveGeneratedAtIfUnchanged(idx, path)
 
-	data, err := json.MarshalIndent(idx, "", "  ")
+	data, err := jsonfile.MarshalIndent(idx)
 	if err != nil {
 		return err
 	}

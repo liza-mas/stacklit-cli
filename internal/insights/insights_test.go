@@ -1,6 +1,8 @@
 package insights
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/glincker/stacklit/internal/schema"
@@ -92,5 +94,22 @@ func TestSeedFromIndexPreservesExistingValuesAndPrunes(t *testing.T) {
 	}
 	if got := file.Architecture.Summary; got != "Existing index summary" {
 		t.Fatalf("expected missing architecture summary to be seeded, got %q", got)
+	}
+}
+
+func TestWriteEndsWithNewline(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "stacklit-insights.json")
+	if err := Write(path, &File{
+		Purpose: map[string]string{"internal/engine": "Index generation pipeline"},
+	}); err != nil {
+		t.Fatalf("Write returned error: %v", err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading insights file: %v", err)
+	}
+	if raw[len(raw)-1] != '\n' {
+		t.Fatalf("insights output should end with newline, got final byte %q", raw[len(raw)-1])
 	}
 }

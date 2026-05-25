@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 	"github.com/glincker/stacklit/internal/git"
 	"github.com/glincker/stacklit/internal/graph"
 	"github.com/glincker/stacklit/internal/insights"
+	"github.com/glincker/stacklit/internal/jsonfile"
 	"github.com/glincker/stacklit/internal/monorepo"
 	"github.com/glincker/stacklit/internal/parser"
 	"github.com/glincker/stacklit/internal/renderer"
@@ -416,11 +416,11 @@ func RunMulti(opts MultiOptions) (*MultiResult, error) {
 	if outputPath == "" {
 		outputPath = "stacklit-multi.json"
 	}
-	multiData, err := json.MarshalIndent(multi, "", "  ")
+	multiData, err := jsonfile.MarshalIndent(multi)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling multi-index: %w", err)
 	}
-	if err := os.WriteFile(outputPath, append(multiData, '\n'), 0644); err != nil {
+	if err := os.WriteFile(outputPath, multiData, 0644); err != nil {
 		return nil, fmt.Errorf("writing %s: %w", outputPath, err)
 	}
 

@@ -214,6 +214,39 @@ func TestRunWarnsButContinuesWhenInsightsMissing(t *testing.T) {
 	}
 }
 
+func TestRunMultiWritesJSONWithTrailingNewline(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo := filepath.Join(tmpDir, "repo")
+	if err := os.MkdirAll(repo, 0755); err != nil {
+		t.Fatalf("creating repo fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("writing repo fixture: %v", err)
+	}
+	reposFile := filepath.Join(tmpDir, "repos.txt")
+	if err := os.WriteFile(reposFile, []byte(repo+"\n"), 0644); err != nil {
+		t.Fatalf("writing repos file: %v", err)
+	}
+	outputPath := filepath.Join(tmpDir, "stacklit-multi.json")
+
+	if _, err := RunMulti(MultiOptions{
+		ReposFile:  reposFile,
+		OutputPath: outputPath,
+		Quiet:      true,
+		JSONOnly:   true,
+	}); err != nil {
+		t.Fatalf("RunMulti returned error: %v", err)
+	}
+
+	raw, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading multi output: %v", err)
+	}
+	if raw[len(raw)-1] != '\n' {
+		t.Fatalf("multi output should end with newline, got final byte %q", raw[len(raw)-1])
+	}
+}
+
 func TestAssembleIndexFiltersTrimmedModuleReferences(t *testing.T) {
 	files := []*parser.FileInfo{
 		{Path: "src/api/index.ts", Language: "TypeScript", Imports: []string{"src/auth", "src/db"}, LineCount: 50},
