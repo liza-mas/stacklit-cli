@@ -8,9 +8,10 @@ import (
 var Version = "dev"
 
 var rootCmd = &cobra.Command{
-	Use:     "stacklit",
-	Short:   "Generate a token-efficient codebase index for AI agents",
-	Version: Version,
+	Use:               "stacklit",
+	Short:             "Generate a token-efficient codebase index for AI agents",
+	Version:           Version,
+	CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 }
 
 // Execute runs the root command.
@@ -19,12 +20,13 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(generateCmd)
+	rootCmd.AddCommand(newGenerateJSONCmd())
+	rootCmd.AddCommand(newFindModuleCmd())
+	rootCmd.AddCommand(newGetDependenciesCmd())
+	rootCmd.AddCommand(newGetHintsCmd())
+	rootCmd.AddCommand(newGetHotFilesCmd())
+	rootCmd.AddCommand(newGetModuleCmd())
 	rootCmd.AddCommand(viewCmd)
 	rootCmd.AddCommand(newDiffCmd())
-	rootCmd.AddCommand(newServeCmd())
 	rootCmd.AddCommand(newDeriveCmd())
-	rootCmd.AddCommand(newSetupCmd())
-	rootCmd.AddCommand(newExportCmd())
 }

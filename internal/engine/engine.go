@@ -23,11 +23,12 @@ import (
 
 // Options configures an engine Run.
 type Options struct {
-	Root        string
-	Workspace   string
-	InstallHook bool
-	Quiet       bool
-	Summary     bool
+	Root       string
+	Workspace  string
+	Quiet      bool
+	Summary    bool
+	JSONOnly   bool
+	JSONOutput string
 }
 
 // Result holds the output paths and assembled index from a Run.
@@ -66,7 +67,6 @@ var purposeMap = map[string]string{
 	"parser":     "Source code parsers",
 	"monorepo":   "Monorepo detection",
 	"detect":     "Framework and tool detection",
-	"mcp":        "MCP server for AI agents",
 	"summary":    "AI-powered codebase summaries",
 }
 
@@ -194,6 +194,9 @@ func Run(opts Options) (*Result, error) {
 
 	// 1a. Load config (best-effort; uses defaults if absent).
 	cfg := config.Load(root)
+	if opts.JSONOutput != "" {
+		cfg.Output.JSON = opts.JSONOutput
+	}
 
 	// 2. Detect monorepo layout.
 	mono, err := monorepo.Detect(root)
@@ -269,6 +272,21 @@ func Run(opts Options) (*Result, error) {
 	if err := renderer.WriteJSON(idx, jsonPath); err != nil {
 		return nil, fmt.Errorf("writing JSON: %w", err)
 	}
+	if opts.JSONOnly {
+		dur := time.Since(start)
+		if !opts.Quiet {
+			fmt.Printf("[stacklit] done in %s — wrote %s\n",
+				dur.Round(time.Millisecond),
+				filepath.Base(jsonPath))
+		}
+		return &Result{
+			JSONPath:    jsonPath,
+			HTMLPath:    htmlPath,
+			MermaidPath: mmdPath,
+			Index:       idx,
+			Duration:    dur,
+		}, nil
+	}
 	if err := renderer.WriteMermaid(idx, mmdPath); err != nil {
 		return nil, fmt.Errorf("writing Mermaid: %w", err)
 	}
@@ -276,16 +294,9 @@ func Run(opts Options) (*Result, error) {
 		return nil, fmt.Errorf("writing HTML: %w", err)
 	}
 
-	// 12. Install git hook if requested.
-	if opts.InstallHook {
-		if hookErr := git.InstallHook(root); hookErr != nil && !opts.Quiet {
-			fmt.Printf("[stacklit] warning: could not install hook: %v\n", hookErr)
-		}
-	}
-
 	dur := time.Since(start)
 
-	// 13. Print summary.
+	// 12. Print summary.
 	if !opts.Quiet {
 		fmt.Printf("[stacklit] done in %s — wrote %s, %s, %s\n",
 			dur.Round(time.Millisecond),

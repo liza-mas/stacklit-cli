@@ -4,63 +4,77 @@
 
 One command makes any repo AI-agent-ready. No server, no setup.
 
-[![CI](https://github.com/glincker/stacklit/actions/workflows/ci.yml/badge.svg)](https://github.com/glincker/stacklit/actions)
-[![Release](https://img.shields.io/github/v/release/glincker/stacklit)](https://github.com/glincker/stacklit/releases)
-[![npm](https://img.shields.io/npm/v/stacklit)](https://www.npmjs.com/package/stacklit)
 [![License](https://img.shields.io/badge/license-MIT-green)](https://opensource.org/licenses/MIT)
+
+## Fork notice
+
+This repository is a fork of [glincker/stacklit](https://github.com/glincker/stacklit). This fork removes the MCP server/tooling surface and exposes the former MCP query tools as plain CLI commands instead:
+
+| Former MCP tool | CLI command |
+|-----------------|-------------|
+| `find_module` | `stacklit find-module <query> -i stacklit.json` |
+| `get_dependencies` | `stacklit get-dependencies <module> -i stacklit.json` |
+| `get_hints` | `stacklit get-hints -i stacklit.json` |
+| `get_hot_files` | `stacklit get-hot-files -i stacklit.json` |
+| `get_module` | `stacklit get-module <name> -i stacklit.json` |
 
 ## Install and run
 
 ```bash
-npx stacklit init
+curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | sh
+stacklit generate-json -o stacklit.json
 ```
 
-That is it. Downloads the binary, scans your codebase, generates the index, opens the visual map. One command.
+That is it. Builds and installs Stacklit from the main branch, then scans your codebase and generates the JSON index. The installer requires `git`, `go`, and `make`.
 
 Other install options:
 
 ```bash
-npm install -g stacklit              # install globally, then run: stacklit init
-go install github.com/glincker/stacklit/cmd/stacklit@latest
+# Build from a branch with caller-provided Go and make
+curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | BRANCH=<branch> sh
+
+# Custom install directory
+curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | INSTALL_DIR=<directory> sh
 ```
 
-Or grab a binary from [GitHub Releases](https://github.com/glincker/stacklit/releases) (macOS, Linux, Windows).
+From a local clone:
+
+```bash
+make install
+stacklit --version
+```
+
+Use `INSTALL_DIR=<directory> make install` to install from a local clone into a custom directory.
 
 ## CI / GitHub Action
 
-Use [glincker/stacklit-action](https://github.com/glincker/stacklit-action) to keep the index fresh automatically. Auto-commit on push, or gate PRs with check mode:
+Use explicit workflow steps to install this fork and regenerate the JSON index:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: glincker/stacklit-action@v1        # auto-commit (default)
-# or: with: { mode: check }               # fail PR if index is stale
+- uses: actions/setup-go@v5
+  with:
+    go-version: '1.25'
+- run: curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | sh
+- run: stacklit generate-json -o stacklit.json
 ```
-
-Add `permissions: contents: write` to the job when using `auto-commit` mode.
 
 ![Stacklit demo](demo.gif)
 
 ## What happens when you run it
 
 ```
-$ stacklit init
-[stacklit] found 342 files
-[stacklit] parsed 342 files (0 errors)
-[stacklit] done in 89ms -- wrote stacklit.json, DEPENDENCIES.md, stacklit.html
-
-Opening visual map...
+$ stacklit generate-json -o stacklit.json
 ```
 
-Three files appear in your project:
+One file appears in your project:
 
 | File | What it is | Commit it? |
 |------|-----------|------------|
 | `stacklit.json` | Codebase index for AI agents | **Yes** |
-| `DEPENDENCIES.md` | Mermaid dependency diagram | **Yes** (renders on GitHub) |
-| `stacklit.html` | Interactive visual map (4 views) | No (gitignored, regenerates) |
 
 ```bash
-git add stacklit.json DEPENDENCIES.md
+git add stacklit.json
 git commit -m "add stacklit codebase index"
 ```
 
@@ -83,7 +97,7 @@ AI coding agents burn most of their context window figuring out where things liv
 | Gin | Go | 23,829 | 3,361 |
 | Axum | Rust | 43,997 | 14,371 |
 
-See [examples/](examples/) for full outputs.
+See [examples/](https://github.com/glincker/stacklit/tree/master/examples) for full outputs.
 
 ## What is in stacklit.json
 
@@ -108,25 +122,6 @@ See [examples/](examples/) for full outputs.
 Modules, dependencies, exports with signatures, type definitions, git activity heatmap, framework detection, and hints for where to add features and how to run tests.
 
 ## Set up your AI tools
-
-### One command (recommended)
-
-```bash
-stacklit setup
-```
-
-Auto-detects Claude Code, Cursor, and Aider. For each:
-- Injects a compact ~250-token codebase map into the tool's config file
-- Configures MCP server integration
-- Installs a git hook to keep the map fresh on every commit
-
-Or configure a specific tool:
-
-```bash
-stacklit setup claude   # updates CLAUDE.md + .mcp.json
-stacklit setup cursor   # updates .cursorrules + .cursor/mcp.json
-stacklit setup aider    # updates .aider.conf.yml
-```
 
 ### Compact navigation map
 
@@ -157,21 +152,6 @@ modules:
 Read stacklit.json before exploring files. Use modules to locate code, hints for conventions.
 ```
 
-**Claude Desktop / Cursor (MCP)**  - add to MCP config:
-
-```json
-{
-  "mcpServers": {
-    "stacklit": {
-      "command": "stacklit",
-      "args": ["serve"]
-    }
-  }
-}
-```
-
-MCP server exposes 7 tools: `get_overview`, `get_module`, `find_module`, `list_modules`, `get_dependencies`, `get_hot_files`, `get_hints`.
-
 **Any other agent** - `stacklit.json` is a plain JSON file. Any tool that reads files can use it.
 
 </details>
@@ -179,16 +159,7 @@ MCP server exposes 7 tools: `get_overview`, `get_module`, `find_module`, `list_m
 ## Keep it updated
 
 ```bash
-stacklit init --hook
-```
-
-Installs a git hook that regenerates the index on every commit. Uses Merkle hashing to skip regeneration when only docs or configs changed.
-
-Other ways to keep it fresh:
-
-```bash
-stacklit generate          # manual regeneration
-stacklit generate --quiet  # silent (for scripts/CI)
+stacklit generate-json -o stacklit.json  # only update the JSON index
 stacklit diff              # check if the index is stale
 ```
 
@@ -200,7 +171,7 @@ name: Update stacklit index
 on:
   push:
     branches: [main]
-    paths-ignore: ['stacklit.json', 'DEPENDENCIES.md', '**.md']
+    paths-ignore: ['stacklit.json', '**.md']
 
 jobs:
   stacklit:
@@ -210,12 +181,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
-      - run: go install github.com/glincker/stacklit/cmd/stacklit@latest
-      - run: stacklit generate --quiet
+      - run: curl -fsSL https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh | sh
+      - run: stacklit generate-json
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update stacklit index"
-          file_pattern: "stacklit.json DEPENDENCIES.md"
+          file_pattern: "stacklit.json"
 ```
 
 </details>
@@ -252,20 +223,15 @@ Any other language gets basic support (line count + language detection).
 ## All CLI commands
 
 ```
-stacklit init                    # scan, generate, open HTML
-stacklit init --hook             # also install git post-commit hook
-stacklit init --multi repos.txt  # polyrepo: scan multiple repos
-stacklit generate                # regenerate from current source
-stacklit view                    # regenerate HTML, open in browser
-stacklit diff                    # check if index is stale
-stacklit serve                   # start MCP server
-stacklit derive                  # print compact nav map (~250 tokens)
-stacklit derive --inject claude  # inject map into CLAUDE.md
-stacklit export                  # print readable markdown overview
-stacklit export -o stacklit.md   # write markdown overview to a file
-stacklit setup                   # auto-configure all detected AI tools
-stacklit setup claude            # configure Claude Code + MCP
-stacklit setup cursor            # configure Cursor + MCP
+stacklit generate-json -o stacklit.json  # generate only the JSON index
+stacklit find-module api -i stacklit.json  # search modules in an index
+stacklit get-module internal/cli -i stacklit.json  # inspect one module
+stacklit get-dependencies internal/cli -i stacklit.json  # module dependency edges
+stacklit get-hints -i stacklit.json       # workflow hints
+stacklit get-hot-files -i stacklit.json   # git churn hotspots
+stacklit view -i stacklit.json   # regenerate HTML from an index, open in browser
+stacklit diff -i stacklit.json   # check if an index is stale
+stacklit derive -i stacklit.json # print compact nav map (~250 tokens)
 ```
 
 <details>
@@ -312,19 +278,14 @@ Yes, locally. It parses source files with tree-sitter to extract structure (impo
 **What if my language isn't supported?**
 Stacklit falls back to basic support (line count + language detection) for any language not in the tree-sitter list. The module map, dependency graph, and git activity still work.
 
-**Does the git hook slow down commits?**
-No. Stacklit uses Merkle hashing to skip regeneration when only docs or configs changed. On a 10k-line repo, regeneration takes ~50ms.
-
 **Can I use Stacklit with GitHub Copilot?**
-Yes. Run `stacklit derive --inject claude` and rename the output to `.github/copilot-instructions.md`, or just commit `stacklit.json` and reference it in your Copilot instructions.
+Yes. Commit `stacklit.json` and reference it in your Copilot instructions.
 
 ## Documentation
 
-- [USAGE.md](USAGE.md) -- full usage guide, command reference, MCP tools, configuration
-- [COMPARISON.md](COMPARISON.md) -- head-to-head comparison with Repomix, code2prompt, Codebase-Memory
+- [USAGE.md](USAGE.md) -- full usage guide, command reference, and configuration
+- [COMPARISON.md](COMPARISON.md) -- head-to-head comparison with Repomix and code2prompt
 - [SKILL.md](SKILL.md) -- instructions for AI agents on how to use stacklit.json
-- [examples/](examples/) -- real stacklit.json outputs from Express.js, FastAPI, Gin, Axum
-- [Discussions](https://github.com/glincker/stacklit/discussions) -- guides, Q&A, feature requests
 
 ## Contributing
 
