@@ -174,6 +174,8 @@ stacklit diff              # check if the index is stale
 
 `stacklit diff` exits `0` when the index is current, `1` when sources changed, and `2` when the command cannot complete.
 
+For a local agent cache, gitignore `stacklit.json` and refresh it from a local `post-commit` hook. See [USAGE.md](USAGE.md#optional-local-post-commit-refresh).
+
 With `--multi`, `-o <file>` changes the multi-index output path from `stacklit-multi.json` to the given file.
 
 <details>

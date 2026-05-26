@@ -126,6 +126,79 @@ stacklit ai-summary
 stacklit generate-json
 ```
 
+### Optional local post-commit refresh
+
+If `stacklit.json` is a local agent cache, add it to `.gitignore` and refresh it after each commit instead of committing index updates:
+
+```gitignore
+stacklit.json
+stacklit.html
+```
+
+Create `index.sh` in the repo root:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+if command -v stacklit >/dev/null; then
+  code=0
+  if [ -f stacklit.json ]; then
+    stacklit diff >/dev/null || code=$?
+    case "$code" in
+      0) [ "${1:-}" = "ai" ] || exit 0 ;;
+      1) ;;
+      *) echo "stacklit diff failed"; exit "$code" ;;
+    esac
+  fi
+
+  echo "Stacklit Indexing..."
+  stacklit generate-json
+  stacklit init-insights
+  if [ "${1:-}" = "ai" ]; then
+    echo "Adding AI summary..."
+    stacklit ai-summary
+  fi
+  stacklit generate-json
+  echo "Wrote stacklit.json"
+fi
+```
+
+Install a local hook at `.git/hooks/post-commit`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$repo_root" ]; then
+  exit 0
+fi
+
+case "$repo_root" in
+  */.worktrees/*)
+    exit 0
+    ;;
+esac
+
+if [ ! -x "$repo_root/index.sh" ]; then
+  exit 0
+fi
+
+cd "$repo_root"
+./index.sh
+```
+
+Then make both scripts executable:
+
+```bash
+chmod +x index.sh .git/hooks/post-commit
+```
+
+This setup keeps `stacklit.json` fresh for local agents without creating generated-file churn in commits. Track `stacklit-insights.json` separately if you want to share curated module purposes, hints, or AI summaries.
+
+If your team wants `stacklit.json` committed, do not use this post-commit pattern as the only refresh step. Regenerate the index before committing or in CI so the commit contains the updated file.
+
 ### Regenerate after making changes
 
 ```bash

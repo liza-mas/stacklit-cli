@@ -1,0 +1,32 @@
+{
+  "purpose": {
+    "assets": "Static assets",
+    "cmd/stacklit": "Stacklit",
+    "internal/cli": "Command-line interface",
+    "internal/config": "Configuration management",
+    "internal/derive": "Derive",
+    "internal/detect": "Framework and tool detection",
+    "internal/engine": "Core orchestration engine",
+    "internal/git": "Git integration",
+    "internal/graph": "Dependency graph",
+    "internal/insights": "Insights",
+    "internal/jsonfile": "Jsonfile",
+    "internal/monorepo": "Monorepo detection",
+    "internal/parser": "Source code parsers",
+    "internal/renderer": "Output renderers",
+    "internal/schema": "Data schema definitions",
+    "internal/summary": "AI-powered codebase summaries",
+    "internal/walker": "File system walker",
+    "root": "Root package"
+  },
+  "hints": {
+    "add_feature": "Start from entrypoint cmd/stacklit/main.go",
+    "test_command": "go test ./...",
+    "env_vars": [
+      "ANTHROPIC_API_KEY"
+    ]
+  },
+  "architecture": {
+    "ai_summary": "Stacklit is a Go CLI tool that statically analyzes codebases to produce structured maps of their architecture — outputting JSON, HTML, Mermaid diagrams, and Markdown. The entry point (`cmd/stacklit`) delegates to `internal/cli`, which dispatches subcommands (view, diff, generate-json, insights, index-query). The core orchestration lives in `internal/engine`, which coordinates the full pipeline: walk the filesystem, parse source files, build a dependency graph, detect frameworks/monorepos, compute git activity, and render outputs.\n\nData flows linearly through a pipeline. `internal/walker` discovers files (respecting ignore rules from `internal/config`). `internal/parser` extracts per-file metadata (imports, exports, type definitions) using tree-sitter grammars for 10+ languages plus a regex-based Go parser. `internal/graph` aggregates parsed files into modules (directory-level groupings) and resolves inter-module dependency edges. These results converge into `internal/schema.Index` — the central data structure that every downstream consumer (renderers, insights, derive, summary) reads from. The schema is the spine: 10 of 18 modules depend on it.\n\nNotable patterns: the `internal/insights` module provides a human-editable YAML sidecar (`stacklit-insights.yml`) that injects purpose annotations and architectural hints into the generated index — a feedback loop where humans curate what static analysis can't infer. `internal/derive` does the reverse, injecting generated index data back into project files (like CLAUDE.md). The `internal/renderer` package produces four output formats from the same `Index`, with `stable.go` ensuring deterministic key ordering for diffable JSON. The `diff` command compares Merkle hashes (`internal/git.ComputeMerkle`) across runs to detect staleness, using differentiated exit codes for CI integration."
+  }
+}
