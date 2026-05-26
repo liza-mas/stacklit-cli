@@ -172,6 +172,8 @@ stacklit diff              # check if the index is stale
 
 `generate-json` automatically enriches the index from `stacklit-insights.json` when it exists. Use `--insights <file>` to read a different insights file; if that file is missing, Stacklit warns and continues without insights.
 
+`stacklit diff` exits `0` when the index is current, `1` when sources changed, and `2` when the command cannot complete.
+
 With `--multi`, `-o <file>` changes the multi-index output path from `stacklit-multi.json` to the given file.
 
 <details>
@@ -264,6 +266,8 @@ stacklit derive -i stacklit.json # print compact nav map (~250 tokens)
 ```
 
 `generate-json` and `diff` honor `output.json` when no explicit output/input flag is passed. Legacy `output.mermaid` and `output.html` keys may exist in older config files, but this CLI no longer exposes the old full-generation command that wrote `DEPENDENCIES.md` and configured HTML. `view` always writes `stacklit.html`.
+
+`diff` uses differentiated exit codes: `0` means the index is current, `1` means sources changed, and `2` means the command failed.
 
 </details>
 

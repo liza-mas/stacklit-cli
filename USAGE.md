@@ -185,6 +185,8 @@ stacklit diff
 
 Prints "Index is up to date" or tells you what changed.
 
+Exit codes: `0` means the index is current, `1` means sources changed, and `2` means the command failed.
+
 ### Open the visual map
 
 ```bash
