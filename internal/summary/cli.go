@@ -27,10 +27,11 @@ const (
 
 // Run invokes the configured agent CLI and parses its stacklit-insights JSON.
 func Run(idx *schema.Index) (*insights.File, error) {
-	command := []string{"claude", "-p"}
+	commandPrefix := defaultCommandPrefix()
 	if parts := strings.Fields(os.Getenv(envCmd)); len(parts) > 0 {
-		command = parts
+		commandPrefix = parts
 	}
+	command := summaryCommand(commandPrefix)
 
 	n, _ := strconv.Atoi(strings.TrimSpace(os.Getenv(envTimeout)))
 	timeout := time.Duration(cmp.Or(max(n, 0), defaultTimeoutSec)) * time.Second
@@ -49,14 +50,11 @@ func Run(idx *schema.Index) (*insights.File, error) {
 		return nil, fmt.Errorf("marshalling index snapshot: %w", err)
 	}
 
-	// Most agent CLIs lack a stdin system-prompt channel, so prepend inline.
-	prompt := systemPrompt + "\n\n" + string(userJSON)
-
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-	cmd.Stdin = strings.NewReader(prompt)
+	cmd.Stdin = strings.NewReader(string(userJSON))
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -85,8 +83,32 @@ func Run(idx *schema.Index) (*insights.File, error) {
 	return generated, nil
 }
 
+func defaultCommandPrefix() []string {
+	return []string{"claude", "-p", "--system-prompt"}
+}
+
+func summaryCommand(prefix []string) []string {
+	command := make([]string, 0, len(prefix)+1)
+	command = append(command, prefix...)
+	command = append(command, systemPrompt)
+	return command
+}
+
 func parseInsightsOutput(text string) (*insights.File, error) {
-	dec := json.NewDecoder(strings.NewReader(strings.TrimSpace(text)))
+	generated, err := parseInsightsJSON(strings.TrimSpace(text))
+	if err == nil {
+		return generated, nil
+	}
+
+	jsonText, ok := firstJSONObject(text)
+	if !ok {
+		return nil, err
+	}
+	return parseInsightsJSON(jsonText)
+}
+
+func parseInsightsJSON(text string) (*insights.File, error) {
+	dec := json.NewDecoder(strings.NewReader(text))
 	var generated insights.File
 	if err := dec.Decode(&generated); err != nil {
 		return nil, fmt.Errorf("expected stacklit-insights JSON: %w", err)
@@ -98,6 +120,47 @@ func parseInsightsOutput(text string) (*insights.File, error) {
 		return nil, fmt.Errorf("expected at least one generated insight")
 	}
 	return &generated, nil
+}
+
+func firstJSONObject(text string) (string, bool) {
+	start := strings.IndexByte(text, '{')
+	if start == -1 {
+		return "", false
+	}
+
+	depth := 0
+	inString := false
+	escaped := false
+	for i := start; i < len(text); i++ {
+		switch text[i] {
+		case '\\':
+			if inString {
+				escaped = !escaped
+			}
+		case '"':
+			if !escaped {
+				inString = !inString
+			}
+			escaped = false
+		case '{':
+			if !inString {
+				depth++
+			}
+			escaped = false
+		case '}':
+			if !inString {
+				depth--
+				if depth == 0 {
+					return text[start : i+1], true
+				}
+			}
+			escaped = false
+		default:
+			escaped = false
+		}
+	}
+
+	return "", false
 }
 
 func isEmpty(file insights.File) bool {

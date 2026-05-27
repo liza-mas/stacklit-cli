@@ -229,24 +229,24 @@ If `stacklit.json` is missing, `init-insights` runs the indexer in memory and cr
 
 ### Configure AI summaries
 
-`ai-summary` reads `stacklit.json`, sends a compact architecture snapshot to a local summary command, and expects stdout to be valid `stacklit-insights.json` content containing `purpose`, `hints`, and `architecture.ai_summary`. Non-empty generated values are merged into the output insights file.
+`ai-summary` reads `stacklit.json`, sends a compact architecture snapshot to a local summary command on stdin, and expects stdout to be valid `stacklit-insights.json` content containing `purpose`, `hints`, and `architecture.ai_summary`. Non-empty generated values are merged into the output insights file.
 
 `derive --ai-summary` is read-only. It includes the existing `architecture.ai_summary` from `stacklit.json` and does not invoke the local summary command. If the summary is missing, refresh it with `stacklit ai-summary` and then rebuild `stacklit.json` with `stacklit generate-json`.
 
 By default, Stacklit runs:
 
 ```bash
-claude -p
+claude -p --system-prompt "<insight-generation instructions>"
 ```
 
-Override the command with `STACKLIT_SUMMARY_CMD`:
+Override the command prefix with `STACKLIT_SUMMARY_CMD`. Stacklit appends the insight-generation prompt after this prefix and sends the compact JSON snapshot on stdin:
 
 ```bash
-STACKLIT_SUMMARY_CMD="claude -p" stacklit ai-summary
-STACKLIT_SUMMARY_CMD="codex exec --ask-for-approval never" stacklit ai-summary
+STACKLIT_SUMMARY_CMD="claude -p --system-prompt" stacklit ai-summary
+STACKLIT_SUMMARY_CMD="codex exec --dangerously-bypass-approvals-and-sandbox" stacklit ai-summary
 ```
 
-The prompt is passed on stdin. The command must write only the insights JSON object to stdout.
+For the default Claude command, insight-generation instructions are passed with `--system-prompt` and stdin contains only the compact JSON snapshot. Custom `STACKLIT_SUMMARY_CMD` prefixes receive the generated prompt as their final argument and must write the insights JSON object to stdout.
 
 `STACKLIT_SUMMARY_CMD` is split on whitespace. Shell-style quoted arguments are not preserved, so prefer simple command lines or a small wrapper script for complex invocations.
 

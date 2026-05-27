@@ -1,9 +1,32 @@
 package summary
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestDefaultCommandAppendsSystemPrompt(t *testing.T) {
+	command := summaryCommand(defaultCommandPrefix())
+
+	if !slices.Equal(command[:3], []string{"claude", "-p", "--system-prompt"}) {
+		t.Fatalf("expected claude print mode with system prompt flag, got %v", command)
+	}
+	if command[3] != systemPrompt {
+		t.Fatal("expected default command to pass summary instructions as system prompt")
+	}
+}
+
+func TestSummaryCommandAppendsPromptToCustomPrefix(t *testing.T) {
+	command := summaryCommand([]string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox"})
+
+	if !slices.Equal(command[:3], []string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox"}) {
+		t.Fatalf("expected custom command prefix to be preserved, got %v", command)
+	}
+	if command[3] != systemPrompt {
+		t.Fatal("expected summary instructions to be appended after custom command prefix")
+	}
+}
 
 func TestParseInsightsOutput(t *testing.T) {
 	got, err := parseInsightsOutput(`{
@@ -30,6 +53,17 @@ func TestParseInsightsOutput(t *testing.T) {
 	}
 	if got.Architecture.Summary != "A focused CLI around an indexing pipeline." {
 		t.Fatalf("expected generated architecture summary, got %+v", got.Architecture)
+	}
+}
+
+func TestParseInsightsOutputExtractsWrappedJSON(t *testing.T) {
+	got, err := parseInsightsOutput("Generated insights:\n```json\n{\n  \"purpose\": {\n    \"internal/summary\": \"AI insight generation with {braces} in prose\"\n  }\n}\n```\nDone.")
+	if err != nil {
+		t.Fatalf("parseInsightsOutput returned error: %v", err)
+	}
+
+	if got.Purpose["internal/summary"] != "AI insight generation with {braces} in prose" {
+		t.Fatalf("expected generated purpose from wrapped JSON, got %+v", got.Purpose)
 	}
 }
 

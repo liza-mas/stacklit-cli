@@ -1,32 +1,32 @@
 {
   "purpose": {
-    "assets": "Static assets",
-    "cmd/stacklit": "Stacklit",
-    "internal/cli": "Command-line interface",
-    "internal/config": "Configuration management",
-    "internal/derive": "Derive",
-    "internal/detect": "Framework and tool detection",
-    "internal/engine": "Core orchestration engine",
-    "internal/git": "Git integration",
-    "internal/graph": "Dependency graph",
-    "internal/insights": "Insights",
-    "internal/jsonfile": "Jsonfile",
-    "internal/monorepo": "Monorepo detection",
-    "internal/parser": "Source code parsers",
-    "internal/renderer": "Output renderers",
-    "internal/schema": "Data schema definitions",
-    "internal/summary": "AI-powered codebase summaries",
-    "internal/walker": "File system walker",
-    "root": "Root package"
+    "assets": "Embedded HTML template and language icon assets used by renderers to produce the browser-facing output.",
+    "cmd/stacklit": "Thin CLI executable entrypoint that delegates command handling to internal/cli.",
+    "internal/cli": "Cobra-style command layer for stacklit workflows including indexing, rendering, diffs, insights, derive output, and exit-code mapping.",
+    "internal/config": "Project configuration loader and defaults for ignore rules, scan limits, and output paths.",
+    "internal/derive": "Utilities that turn a schema index into compact injectable summaries and update target files with generated blocks.",
+    "internal/detect": "Heuristics for detecting frameworks, environment variables, and repository conventions from files and imports.",
+    "internal/engine": "Central orchestration layer that scans repositories, parses files, builds graphs, applies insights, and writes outputs.",
+    "internal/git": "Git-derived activity and content identity helpers, including recent/hot file analysis and Merkle hashing.",
+    "internal/graph": "Module dependency graph builder that groups parsed files, computes edges, entrypoints, isolated modules, and dependency rankings.",
+    "internal/insights": "Load, merge, seed, apply, and write stacklit-insights.json purpose, hint, and architecture overlays.",
+    "internal/jsonfile": "Shared JSON marshal and indented write helpers for stable formatted output files.",
+    "internal/monorepo": "Repository workspace detector for monorepo tools and workspace layouts.",
+    "internal/parser": "Language-aware source parsers that extract imports, exports, type definitions, line counts, and entrypoint flags.",
+    "internal/renderer": "JSON, Markdown, Mermaid, and HTML output generation from the canonical schema index.",
+    "internal/schema": "Canonical data model for project indexes, module metadata, dependencies, git activity, hints, and multi-repo summaries.",
+    "internal/summary": "AI-assisted summary command integration that generates insights files from schema indexes.",
+    "internal/walker": "Filesystem traversal with ignore handling to produce the source file list for indexing.",
+    "root": "Shell installer and convenience indexing scripts outside the Go application packages."
   },
   "hints": {
-    "add_feature": "Start from entrypoint cmd/stacklit/main.go",
+    "add_feature": "For new CLI-visible behavior, start in internal/cli, delegate orchestration to internal/engine, add schema fields in internal/schema only when the output contract changes, and update renderer/insights handling for any new index data.",
     "test_command": "go test ./...",
     "env_vars": [
       "ANTHROPIC_API_KEY"
     ]
   },
   "architecture": {
-    "ai_summary": "Stacklit is a Go CLI tool that statically analyzes codebases to produce structured maps of their architecture — outputting JSON, HTML, Mermaid diagrams, and Markdown. The entry point (`cmd/stacklit`) delegates to `internal/cli`, which dispatches subcommands (view, diff, generate-json, insights, index-query). The core orchestration lives in `internal/engine`, which coordinates the full pipeline: walk the filesystem, parse source files, build a dependency graph, detect frameworks/monorepos, compute git activity, and render outputs.\n\nData flows linearly through a pipeline. `internal/walker` discovers files (respecting ignore rules from `internal/config`). `internal/parser` extracts per-file metadata (imports, exports, type definitions) using tree-sitter grammars for 10+ languages plus a regex-based Go parser. `internal/graph` aggregates parsed files into modules (directory-level groupings) and resolves inter-module dependency edges. These results converge into `internal/schema.Index` — the central data structure that every downstream consumer (renderers, insights, derive, summary) reads from. The schema is the spine: 10 of 18 modules depend on it.\n\nNotable patterns: the `internal/insights` module provides a human-editable YAML sidecar (`stacklit-insights.yml`) that injects purpose annotations and architectural hints into the generated index — a feedback loop where humans curate what static analysis can't infer. `internal/derive` does the reverse, injecting generated index data back into project files (like CLAUDE.md). The `internal/renderer` package produces four output formats from the same `Index`, with `stable.go` ensuring deterministic key ordering for diffable JSON. The `diff` command compares Merkle hashes (`internal/git.ComputeMerkle`) across runs to detect staleness, using differentiated exit codes for CI integration."
+    "ai_summary": "Stacklit is a Go CLI organized around a thin cmd/stacklit entrypoint and a command layer in internal/cli. The internal/engine package is the main coordinator: it loads config, walks files, parses source, detects frameworks and monorepos, builds dependency graphs, applies optional insights, and dispatches output writers. internal/schema is the shared contract used across almost every subsystem, so changes to index shape should be treated as cross-cutting.\n\nData flows from filesystem discovery in internal/walker into internal/parser, then through internal/graph and internal/detect to populate schema.Index. Git metadata from internal/git enriches the index with activity and stable identity, while internal/insights overlays human or AI-maintained purpose, hints, and architecture summaries. Renderers consume the final schema to emit JSON, Markdown, Mermaid, and HTML, with embedded assets supplying template and icon resources.\n\nThe codebase favors small internal packages around one stage of the indexing pipeline, with tests colocated beside most core packages. Additions should preserve that pipeline shape: parsing and detection stay low-level, graph/schema remain canonical, engine composes workflows, CLI handles user intent and exit behavior, and renderer packages should only format already-derived data."
   }
 }
