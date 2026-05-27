@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/glincker/stacklit/internal/insights"
 	"github.com/glincker/stacklit/internal/schema"
 	"github.com/spf13/cobra"
 )
@@ -183,6 +184,90 @@ func TestGenerateJSONProceedsWithoutDefaultInsights(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "stacklit.json")); err != nil {
 		t.Fatalf("expected generated index to exist: %v", err)
+	}
+}
+
+func TestAISummaryWritesGeneratedInsights(t *testing.T) {
+	root := t.TempDir()
+	indexPath := filepath.Join(root, "stacklit.json")
+	outputPath := filepath.Join(root, "stacklit-insights.json")
+	summaryPath := filepath.Join(root, "summary")
+
+	idx := schema.Index{
+		Project: schema.Project{Name: "stacklit", Root: ".", Type: "go"},
+		Tech: schema.Tech{
+			PrimaryLanguage: "go",
+			Languages: map[string]schema.LangStats{
+				"go": {Files: 1, Lines: 12},
+			},
+		},
+		Structure: schema.Structure{Entrypoints: []string{"cmd/stacklit/main.go"}},
+		Modules: map[string]schema.ModuleInfo{
+			"internal/cli": {Purpose: "Old CLI purpose", Files: 1, Lines: 12},
+		},
+		Dependencies: schema.Dependencies{},
+		Hints:        schema.Hints{TestCmd: "go test ./..."},
+	}
+	data, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatalf("marshalling index fixture: %v", err)
+	}
+	if err := os.WriteFile(indexPath, data, 0644); err != nil {
+		t.Fatalf("writing index fixture: %v", err)
+	}
+	if err := os.WriteFile(outputPath, []byte(`{
+  "purpose": {
+    "internal/cli": "Existing curated purpose"
+  }
+}`), 0644); err != nil {
+		t.Fatalf("writing existing insights: %v", err)
+	}
+	if err := os.WriteFile(summaryPath, []byte(`#!/bin/sh
+cat <<'JSON'
+{
+  "purpose": {
+    "internal/cli": "Generated CLI purpose",
+    "internal/summary": "AI-generated insight production"
+  },
+  "hints": {
+    "add_feature": "Add commands in internal/cli",
+    "test_command": "go test ./...",
+    "env_vars": ["STACKLIT_SUMMARY_CMD"]
+  },
+  "architecture": {
+    "ai_summary": "A focused CLI around an indexing pipeline."
+  }
+}
+JSON
+`), 0755); err != nil {
+		t.Fatalf("writing summary command: %v", err)
+	}
+
+	t.Setenv("STACKLIT_SUMMARY_CMD", summaryPath)
+	cmd := newAISummaryCmd()
+	cmd.SetArgs([]string{"-i", indexPath, "-o", outputPath})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("ai-summary returned error: %v", err)
+	}
+
+	got, err := insights.Load(outputPath)
+	if err != nil {
+		t.Fatalf("loading generated insights: %v", err)
+	}
+	if got.Purpose["internal/cli"] != "Existing curated purpose" {
+		t.Fatalf("expected existing curated purpose to be preserved, got %+v", got.Purpose)
+	}
+	if got.Purpose["internal/summary"] != "AI-generated insight production" {
+		t.Fatalf("expected generated purpose for new module, got %+v", got.Purpose)
+	}
+	if got.Hints.AddFeature != "Add commands in internal/cli" {
+		t.Fatalf("expected generated add_feature hint, got %+v", got.Hints)
+	}
+	if got.Hints.TestCmd != "go test ./..." {
+		t.Fatalf("expected generated test command, got %+v", got.Hints)
+	}
+	if got.Architecture.Summary != "A focused CLI around an indexing pipeline." {
+		t.Fatalf("expected generated architecture summary, got %+v", got.Architecture)
 	}
 }
 

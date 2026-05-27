@@ -97,6 +97,59 @@ func TestSeedFromIndexPreservesExistingValuesAndPrunes(t *testing.T) {
 	}
 }
 
+func TestMergeAppliesGeneratedInsights(t *testing.T) {
+	target := &File{
+		Purpose: map[string]string{
+			"internal/cli":    "Old CLI purpose",
+			"internal/engine": "Core orchestration engine",
+		},
+		Hints: schema.Hints{
+			TestCmd: "go test ./...",
+			EnvVars: []string{"ANTHROPIC_API_KEY"},
+		},
+		Architecture: schema.Architecture{Summary: "Old summary"},
+	}
+	source := &File{
+		Purpose: map[string]string{
+			"internal/cli":     "CLI commands and wiring",
+			"internal/summary": "AI insight generation",
+			"internal/empty":   "",
+		},
+		Hints: schema.Hints{
+			AddFeature: "Add commands in internal/cli",
+			EnvVars:    []string{"STACKLIT_SUMMARY_CMD", "ANTHROPIC_API_KEY"},
+		},
+		Architecture: schema.Architecture{Summary: "Generated architecture summary"},
+	}
+
+	Merge(target, source)
+
+	if got := target.Purpose["internal/cli"]; got != "Old CLI purpose" {
+		t.Fatalf("expected existing purpose to be preserved, got %q", got)
+	}
+	if got := target.Purpose["internal/engine"]; got != "Core orchestration engine" {
+		t.Fatalf("expected omitted purpose to be preserved, got %q", got)
+	}
+	if got := target.Purpose["internal/summary"]; got != "AI insight generation" {
+		t.Fatalf("expected missing purpose to be filled from generated value, got %q", got)
+	}
+	if _, ok := target.Purpose["internal/empty"]; ok {
+		t.Fatal("expected empty generated purpose to be ignored")
+	}
+	if got := target.Hints.TestCmd; got != "go test ./..." {
+		t.Fatalf("expected omitted test command to be preserved, got %q", got)
+	}
+	if got := target.Hints.AddFeature; got != "Add commands in internal/cli" {
+		t.Fatalf("expected generated add_feature hint, got %q", got)
+	}
+	if len(target.Hints.EnvVars) != 2 {
+		t.Fatalf("expected env vars to be unioned, got %v", target.Hints.EnvVars)
+	}
+	if got := target.Architecture.Summary; got != "Generated architecture summary" {
+		t.Fatalf("expected generated architecture summary, got %q", got)
+	}
+}
+
 func TestWriteEndsWithNewline(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "stacklit-insights.json")
 	if err := Write(path, &File{

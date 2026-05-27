@@ -63,11 +63,11 @@ func newAISummaryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			text, err := summary.Run(idx)
+			generated, err := summary.Run(idx)
 			if err != nil {
 				return err
 			}
-			file.Architecture.Summary = text
+			insights.Merge(file, generated)
 			if err := insights.Write(output, file); err != nil {
 				return err
 			}

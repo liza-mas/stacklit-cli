@@ -57,7 +57,7 @@ stacklit ai-summary
 stacklit generate-json
 ```
 
-`init-insights` creates `stacklit-insights.json` from the current index. `ai-summary` adds an AI-generated architecture summary to that insights file. The final `generate-json` rebuilds `stacklit.json` enriched with the curated insights.
+`init-insights` creates `stacklit-insights.json` from the current index. `ai-summary` refreshes AI-generated module purposes, workflow hints, and the architecture summary in that insights file. The final `generate-json` rebuilds `stacklit.json` enriched with the curated insights.
 
 Skip `ai-summary` if you do not want AI-generated summaries.
 
@@ -118,7 +118,7 @@ stacklit init-insights
 stacklit generate-json
 ```
 
-Refresh the AI architecture summary:
+Refresh AI-generated insights:
 
 ```bash
 stacklit generate-json
@@ -162,7 +162,7 @@ if command -v stacklit >/dev/null; then
   stacklit generate-json
   stacklit init-insights
   if [ "${1:-}" = "ai" ]; then
-    echo "Adding AI summary..."
+    echo "Adding AI-generated insights..."
     stacklit ai-summary
   fi
   stacklit generate-json
@@ -223,13 +223,13 @@ stacklit ai-summary
 stacklit generate-json
 ```
 
-`init-insights` creates or updates `stacklit-insights.json` with module purposes and hints while preserving existing edits. `ai-summary` updates `architecture.ai_summary` in the insights file.
+`init-insights` creates or updates `stacklit-insights.json` with module purposes and hints while preserving existing edits. `ai-summary` asks the configured local agent to generate insights JSON, then updates module purposes, workflow hints, and `architecture.ai_summary` in the insights file.
 
 If `stacklit.json` is missing, `init-insights` runs the indexer in memory and creates `stacklit-insights.json` without writing `stacklit.json`. By default it preserves purpose entries for modules that no longer exist; use `--prune` to remove those stale purpose entries.
 
 ### Configure AI summaries
 
-`ai-summary` reads `stacklit.json`, sends a compact architecture snapshot to a local summary command, and writes the command's stdout to `architecture.ai_summary` in `stacklit-insights.json`.
+`ai-summary` reads `stacklit.json`, sends a compact architecture snapshot to a local summary command, and expects stdout to be valid `stacklit-insights.json` content containing `purpose`, `hints`, and `architecture.ai_summary`. Non-empty generated values are merged into the output insights file.
 
 `derive --ai-summary` is read-only. It includes the existing `architecture.ai_summary` from `stacklit.json` and does not invoke the local summary command. If the summary is missing, refresh it with `stacklit ai-summary` and then rebuild `stacklit.json` with `stacklit generate-json`.
 
@@ -246,7 +246,7 @@ STACKLIT_SUMMARY_CMD="claude -p" stacklit ai-summary
 STACKLIT_SUMMARY_CMD="codex exec --ask-for-approval never" stacklit ai-summary
 ```
 
-The prompt is passed on stdin. The command must write the summary to stdout.
+The prompt is passed on stdin. The command must write only the insights JSON object to stdout.
 
 `STACKLIT_SUMMARY_CMD` is split on whitespace. Shell-style quoted arguments are not preserved, so prefer simple command lines or a small wrapper script for complex invocations.
 
@@ -287,7 +287,7 @@ Regenerates `stacklit.html` and opens it in your browser.
 | `stacklit generate-json --workspace ..` | Record the repo root relative to a workspace root |
 | `stacklit generate-json --multi repos.txt` | Generate a combined `stacklit-multi.json` from repo paths |
 | `stacklit init-insights -i stacklit.json -o stacklit-insights.json` | Seed or update curated insights |
-| `stacklit ai-summary -i stacklit.json -o stacklit-insights.json` | Update the AI summary in the insights file |
+| `stacklit ai-summary -i stacklit.json -o stacklit-insights.json` | Update AI-generated purposes, hints, and summary in the insights file |
 | `stacklit derive --ai-summary -i stacklit.json` | Print the compact map with the stored AI summary included |
 | `stacklit find-module api -i stacklit.json` | Search modules in an index |
 | `stacklit get-module internal/cli -i stacklit.json` | Get full info for one module |

@@ -8,15 +8,16 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/glincker/stacklit/internal/insights"
 	"github.com/glincker/stacklit/internal/schema"
 )
 
 const (
-	claudeAPIURL   = "https://api.anthropic.com/v1/messages"
-	claudeModel    = "claude-sonnet-4-20250514"
-	claudeVersion  = "2023-06-01"
-	maxTokens      = 500
-	systemPrompt   = "You are a senior software architect. Summarize this codebase architecture in 2-3 concise paragraphs. Focus on the overall structure, key patterns, and how data flows. Be specific to this codebase, not generic."
+	claudeAPIURL  = "https://api.anthropic.com/v1/messages"
+	claudeModel   = "claude-sonnet-4-20250514"
+	claudeVersion = "2023-06-01"
+	maxTokens     = 4096
+	systemPrompt  = "You are a senior software architect generating stacklit-insights.json. Return only valid JSON with this exact shape: {\"purpose\":{\"module/name\":\"...\"},\"hints\":{\"add_feature\":\"...\",\"test_command\":\"...\",\"env_vars\":[\"...\"]},\"architecture\":{\"ai_summary\":\"...\"}}. Include one concise purpose for every module key in modules. Infer workflow hints from existing hints, entrypoints, tech, and project structure. architecture.ai_summary must be 2-3 concise paragraphs focused on structure, key patterns, and data flow. Be specific to this codebase. Do not wrap the JSON in Markdown or include commentary."
 )
 
 // indexSnapshot is the subset of the index sent to the API.
@@ -26,6 +27,7 @@ type indexSnapshot struct {
 	Modules      map[string]schema.ModuleInfo `json:"modules"`
 	Dependencies schema.Dependencies          `json:"dependencies"`
 	Entrypoints  []string                     `json:"entrypoints"`
+	Hints        schema.Hints                 `json:"hints,omitempty"`
 }
 
 // claudeRequest is the request body for the Anthropic Messages API.
@@ -48,12 +50,11 @@ type claudeResponse struct {
 	} `json:"error,omitempty"`
 }
 
-// Generate calls the Anthropic Claude API and returns a 2-3 paragraph narrative
-// summary of the codebase architecture described by idx.
-func Generate(idx *schema.Index) (string, error) {
+// Generate calls the Anthropic Claude API and returns generated insights for idx.
+func Generate(idx *schema.Index) (*insights.File, error) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
-		return "", fmt.Errorf("ANTHROPIC_API_KEY not set. Set it to generate AI summaries")
+		return nil, fmt.Errorf("ANTHROPIC_API_KEY not set. Set it to generate AI summaries")
 	}
 
 	snapshot := indexSnapshot{
@@ -62,14 +63,19 @@ func Generate(idx *schema.Index) (string, error) {
 		Modules:      idx.Modules,
 		Dependencies: idx.Dependencies,
 		Entrypoints:  idx.Structure.Entrypoints,
+		Hints:        idx.Hints,
 	}
 
 	userMsg, err := json.Marshal(snapshot)
 	if err != nil {
-		return "", fmt.Errorf("marshalling index snapshot: %w", err)
+		return nil, fmt.Errorf("marshalling index snapshot: %w", err)
 	}
 
-	return callClaude(apiKey, systemPrompt, string(userMsg))
+	text, err := callClaude(apiKey, systemPrompt, string(userMsg))
+	if err != nil {
+		return nil, err
+	}
+	return parseInsightsOutput(text)
 }
 
 func callClaude(apiKey, system, userMessage string) (string, error) {

@@ -166,7 +166,7 @@ stacklit generate-json -o stacklit.json  # only update the JSON index
 stacklit generate-json --workspace ..    # record the repo relative to a workspace root
 stacklit generate-json --multi repos.txt # write a combined stacklit-multi.json
 stacklit init-insights                   # create/update stacklit-insights.json
-stacklit ai-summary                      # update insights with an AI architecture summary
+stacklit ai-summary                      # update insights with AI purposes, hints, and summary
 stacklit derive --ai-summary             # include the stored AI summary in the compact map
 stacklit diff              # check if the index is stale
 ```
@@ -244,7 +244,7 @@ stacklit generate-json --insights stacklit-insights.json # enrich from insights
 stacklit generate-json --workspace ..    # record the repo relative to a workspace root
 stacklit generate-json --multi repos.txt # generate stacklit-multi.json from repo paths
 stacklit init-insights -i stacklit.json -o stacklit-insights.json # seed curated insights
-stacklit ai-summary -i stacklit.json -o stacklit-insights.json    # update AI summary
+stacklit ai-summary -i stacklit.json -o stacklit-insights.json    # update AI-generated insights
 stacklit find-module api -i stacklit.json  # search modules in an index
 stacklit get-module internal/cli -i stacklit.json  # inspect one module
 stacklit get-dependencies internal/cli -i stacklit.json  # module dependency edges
@@ -298,7 +298,7 @@ stacklit derive --ai-summary -i stacklit.json # include stored AI summary
 
 Create or refresh it with `stacklit init-insights`. Existing entries are preserved; pass `--prune` to remove purpose entries for modules that no longer exist. If `stacklit.json` is missing, `init-insights` scans in memory and writes only the insights file.
 
-Generate the AI summary separately with `stacklit ai-summary`. By default it runs `claude -p`, sends the summary prompt on stdin, and stores stdout in `architecture.ai_summary`. Configure another local summary command with `STACKLIT_SUMMARY_CMD`, and adjust the timeout with `STACKLIT_SUMMARY_TIMEOUT`. `STACKLIT_SUMMARY_CMD` is split on whitespace, so use a wrapper script for complex quoted arguments.
+Generate AI insights separately with `stacklit ai-summary`. By default it runs `claude -p`, sends the insights prompt on stdin, and expects stdout to be valid `stacklit-insights.json` content containing `purpose`, `hints`, and `architecture.ai_summary`. Configure another local summary command with `STACKLIT_SUMMARY_CMD`, and adjust the timeout with `STACKLIT_SUMMARY_TIMEOUT`. `STACKLIT_SUMMARY_CMD` is split on whitespace, so use a wrapper script for complex quoted arguments.
 
 Use `stacklit derive --ai-summary` to include the stored summary in the compact map. This is read-only and does not call the summary command.
 

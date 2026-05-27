@@ -75,6 +75,20 @@ func Apply(idx *schema.Index, file *File) {
 	applyArchitecture(&idx.Architecture, file.Architecture)
 }
 
+func Merge(target *File, source *File) {
+	if target == nil || source == nil {
+		return
+	}
+	ensurePurpose(target)
+	for name, purpose := range source.Purpose {
+		if purpose != "" && target.Purpose[name] == "" {
+			target.Purpose[name] = purpose
+		}
+	}
+	applyHints(&target.Hints, source.Hints)
+	applyArchitecture(&target.Architecture, source.Architecture)
+}
+
 func SeedFromIndex(file *File, idx *schema.Index, prune bool) {
 	ensurePurpose(file)
 	if idx == nil {
