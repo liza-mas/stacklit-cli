@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,9 +11,25 @@ import (
 	"github.com/glincker/stacklit/internal/schema"
 )
 
+// ErrMissingAISummary is returned when AI summary output is requested but the
+// index does not contain architecture.ai_summary.
+var ErrMissingAISummary = errors.New("architecture.ai_summary is empty")
+
+// CompactMapOptions controls optional sections in the derived map.
+type CompactMapOptions struct {
+	IncludeAISummary bool
+}
+
 // CompactMap generates a token-efficient navigation map (~250 tokens) from an Index.
 // This replaces 3,000-8,000 tokens of agent exploration with a single static block.
 func CompactMap(idx *schema.Index) string {
+	out, _ := CompactMapWithOptions(idx, CompactMapOptions{})
+	return out
+}
+
+// CompactMapWithOptions generates a token-efficient navigation map from an
+// Index, with opt-in sections that may expand the output.
+func CompactMapWithOptions(idx *schema.Index, opts CompactMapOptions) (string, error) {
 	var b strings.Builder
 
 	// Line 1: project summary
@@ -42,6 +59,16 @@ func CompactMap(idx *schema.Index) string {
 	}
 	if len(meta) > 0 {
 		b.WriteString(strings.Join(meta, " | "))
+		b.WriteString("\n")
+	}
+
+	if opts.IncludeAISummary {
+		summary := strings.TrimSpace(idx.Architecture.Summary)
+		if summary == "" {
+			return "", ErrMissingAISummary
+		}
+		b.WriteString("\nai-summary:\n")
+		b.WriteString(summary)
 		b.WriteString("\n")
 	}
 
@@ -103,7 +130,7 @@ func CompactMap(idx *schema.Index) string {
 		b.WriteString("\n")
 	}
 
-	return b.String()
+	return b.String(), nil
 }
 
 // InjectableBlock wraps the compact map in markers for injection into config files.

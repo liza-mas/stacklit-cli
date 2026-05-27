@@ -167,6 +167,7 @@ stacklit generate-json --workspace ..    # record the repo relative to a workspa
 stacklit generate-json --multi repos.txt # write a combined stacklit-multi.json
 stacklit init-insights                   # create/update stacklit-insights.json
 stacklit ai-summary                      # update insights with an AI architecture summary
+stacklit derive --ai-summary             # include the stored AI summary in the compact map
 stacklit diff              # check if the index is stale
 ```
 
@@ -252,6 +253,7 @@ stacklit get-hot-files -i stacklit.json   # git churn hotspots
 stacklit view -i stacklit.json   # regenerate HTML from an index, open in browser
 stacklit diff -i stacklit.json   # check if an index is stale
 stacklit derive -i stacklit.json # print compact nav map (~250 tokens)
+stacklit derive --ai-summary -i stacklit.json # include stored AI summary
 ```
 
 <details>
@@ -297,6 +299,8 @@ stacklit derive -i stacklit.json # print compact nav map (~250 tokens)
 Create or refresh it with `stacklit init-insights`. Existing entries are preserved; pass `--prune` to remove purpose entries for modules that no longer exist. If `stacklit.json` is missing, `init-insights` scans in memory and writes only the insights file.
 
 Generate the AI summary separately with `stacklit ai-summary`. By default it runs `claude -p`, sends the summary prompt on stdin, and stores stdout in `architecture.ai_summary`. Configure another local summary command with `STACKLIT_SUMMARY_CMD`, and adjust the timeout with `STACKLIT_SUMMARY_TIMEOUT`. `STACKLIT_SUMMARY_CMD` is split on whitespace, so use a wrapper script for complex quoted arguments.
+
+Use `stacklit derive --ai-summary` to include the stored summary in the compact map. This is read-only and does not call the summary command.
 
 </details>
 

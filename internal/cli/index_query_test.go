@@ -62,6 +62,35 @@ func TestDeriveDoesNotExposeInjectFlag(t *testing.T) {
 	}
 }
 
+func TestDeriveExposesAISummaryFlag(t *testing.T) {
+	cmd := newDeriveCmd()
+	if flag := cmd.Flags().Lookup("ai-summary"); flag == nil {
+		t.Fatal("derive should expose --ai-summary")
+	}
+}
+
+func TestDeriveAISummaryRequiresSummary(t *testing.T) {
+	root := t.TempDir()
+	indexPath := filepath.Join(root, "stacklit.json")
+	if err := os.WriteFile(indexPath, []byte(`{
+  "project": {"name": "demo"},
+  "tech": {"primary_language": "go"},
+  "modules": {}
+}`), 0644); err != nil {
+		t.Fatalf("writing index fixture: %v", err)
+	}
+
+	cmd := newDeriveCmd()
+	cmd.SetArgs([]string{"-i", indexPath, "--ai-summary"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected missing AI summary error")
+	}
+	if !strings.Contains(err.Error(), "has no architecture.ai_summary") {
+		t.Fatalf("expected missing AI summary message, got %v", err)
+	}
+}
+
 func TestGenerateJSONExposesIndexingFlags(t *testing.T) {
 	cmd := newGenerateJSONCmd()
 	for _, name := range []string{"workspace", "multi", "insights"} {

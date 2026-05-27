@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -13,6 +14,8 @@ import (
 var deriveInput string
 
 func newDeriveCmd() *cobra.Command {
+	var includeAISummary bool
+
 	cmd := &cobra.Command{
 		Use:   "derive",
 		Short: "Generate a compact codebase navigation map (~250 tokens)",
@@ -31,10 +34,20 @@ replacing 3,000-8,000 tokens of agent exploration per session.`,
 				return fmt.Errorf("could not parse %s: %w", deriveInput, err)
 			}
 
-			fmt.Print(derive.CompactMap(&idx))
+			output, err := derive.CompactMapWithOptions(&idx, derive.CompactMapOptions{
+				IncludeAISummary: includeAISummary,
+			})
+			if err != nil {
+				if errors.Is(err, derive.ErrMissingAISummary) {
+					return fmt.Errorf("%s has no architecture.ai_summary; run 'stacklit ai-summary' then 'stacklit generate-json'", deriveInput)
+				}
+				return err
+			}
+			fmt.Print(output)
 			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&deriveInput, "input", "i", defaultIndexPath, "Path to the stacklit JSON index")
+	cmd.Flags().BoolVar(&includeAISummary, "ai-summary", false, "Include architecture.ai_summary from the index")
 	return cmd
 }

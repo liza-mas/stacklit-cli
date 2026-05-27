@@ -126,6 +126,12 @@ stacklit ai-summary
 stacklit generate-json
 ```
 
+Include the stored AI summary in the compact navigation map:
+
+```bash
+stacklit derive --ai-summary
+```
+
 ### Optional local post-commit refresh
 
 If `stacklit.json` is a local agent cache, add it to `.gitignore` and refresh it after each commit instead of committing index updates:
@@ -225,6 +231,8 @@ If `stacklit.json` is missing, `init-insights` runs the indexer in memory and cr
 
 `ai-summary` reads `stacklit.json`, sends a compact architecture snapshot to a local summary command, and writes the command's stdout to `architecture.ai_summary` in `stacklit-insights.json`.
 
+`derive --ai-summary` is read-only. It includes the existing `architecture.ai_summary` from `stacklit.json` and does not invoke the local summary command. If the summary is missing, refresh it with `stacklit ai-summary` and then rebuild `stacklit.json` with `stacklit generate-json`.
+
 By default, Stacklit runs:
 
 ```bash
@@ -280,6 +288,7 @@ Regenerates `stacklit.html` and opens it in your browser.
 | `stacklit generate-json --multi repos.txt` | Generate a combined `stacklit-multi.json` from repo paths |
 | `stacklit init-insights -i stacklit.json -o stacklit-insights.json` | Seed or update curated insights |
 | `stacklit ai-summary -i stacklit.json -o stacklit-insights.json` | Update the AI summary in the insights file |
+| `stacklit derive --ai-summary -i stacklit.json` | Print the compact map with the stored AI summary included |
 | `stacklit find-module api -i stacklit.json` | Search modules in an index |
 | `stacklit get-module internal/cli -i stacklit.json` | Get full info for one module |
 | `stacklit get-dependencies internal/cli -i stacklit.json` | Get dependency edges for a module |
