@@ -291,9 +291,9 @@ func Run(opts Options) (*Result, error) {
 	}
 
 	// 11. Write outputs using config-driven paths.
-	jsonPath := filepath.Join(root, cfg.Output.JSON)
-	mmdPath := filepath.Join(root, cfg.Output.Mermaid)
-	htmlPath := filepath.Join(root, cfg.Output.HTML)
+	jsonPath := resolveRootPath(root, cfg.Output.JSON)
+	mmdPath := resolveRootPath(root, cfg.Output.Mermaid)
+	htmlPath := resolveRootPath(root, cfg.Output.HTML)
 
 	if opts.SkipWrite {
 		dur := time.Since(start)

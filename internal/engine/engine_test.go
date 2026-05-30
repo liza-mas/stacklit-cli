@@ -44,6 +44,35 @@ func TestRunJSONOnlyWritesOnlyJSON(t *testing.T) {
 	}
 }
 
+func TestRunJSONOnlyPreservesAbsoluteJSONOutput(t *testing.T) {
+	root := t.TempDir()
+	outputDir := t.TempDir()
+	outputPath := filepath.Join(outputDir, "stacklit.json")
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+
+	result, err := Run(Options{
+		Root:       root,
+		Quiet:      true,
+		JSONOnly:   true,
+		JSONOutput: outputPath,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if result.JSONPath != outputPath {
+		t.Fatalf("expected absolute JSON path %q, got %q", outputPath, result.JSONPath)
+	}
+	if _, err := os.Stat(outputPath); err != nil {
+		t.Fatalf("expected JSON output at absolute path: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, outputDir, "stacklit.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected output not to be written under root, stat error: %v", err)
+	}
+}
+
 func TestRunJSONOnlyUsesConfiguredJSONOutputByDefault(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
