@@ -165,6 +165,7 @@ Read stacklit.json before exploring files. Use modules to locate code, hints for
 stacklit generate-json -o stacklit.json  # only update the JSON index
 stacklit generate-json --workspace ..    # record the repo relative to a workspace root
 stacklit generate-json --multi repos.txt # write a combined stacklit-multi.json
+stacklit generate-json --parse-workers 4 # override parser worker count for this run
 stacklit init-insights                   # create/update stacklit-insights.json
 stacklit ai-summary                      # update insights with AI purposes, hints, and summary
 stacklit derive --ai-summary             # include the stored AI summary in the compact map
@@ -172,6 +173,8 @@ stacklit diff              # check if the index is stale
 ```
 
 `generate-json` automatically enriches the index from `stacklit-insights.json` when it exists. Use `--insights <file>` to read a different insights file; if that file is missing, Stacklit warns and continues without insights.
+
+Parser concurrency defaults to `1` worker. Set `.stacklitrc.json` `parse_workers` for durable project configuration or pass `generate-json --parse-workers N` for a command-local override. A worker count of `1` disables parallel parsing for sequential compatibility, values below `1` are invalid, and higher counts may reduce wall time while increasing maximum RSS.
 
 `stacklit diff` exits `0` when the index is current, `1` when sources changed, and `2` when the command cannot complete.
 
@@ -243,6 +246,7 @@ stacklit generate-json -o stacklit.json  # generate only the JSON index
 stacklit generate-json --insights stacklit-insights.json # enrich from insights
 stacklit generate-json --workspace ..    # record the repo relative to a workspace root
 stacklit generate-json --multi repos.txt # generate stacklit-multi.json from repo paths
+stacklit generate-json --parse-workers 4 # command-local parser worker override
 stacklit init-insights -i stacklit.json -o stacklit-insights.json # seed curated insights
 stacklit ai-summary -i stacklit.json -o stacklit-insights.json    # update AI-generated insights
 stacklit find-module api -i stacklit.json  # search modules in an index
@@ -263,6 +267,7 @@ stacklit derive --ai-summary -i stacklit.json # include stored AI summary
 {
   "ignore": ["vendor/", "generated/"],
   "max_depth": 3,
+  "parse_workers": 1,
   "output": {
     "json": "stacklit.json"
   }
@@ -270,6 +275,8 @@ stacklit derive --ai-summary -i stacklit.json # include stored AI summary
 ```
 
 `generate-json` and `diff` honor `output.json` when no explicit output/input flag is passed. Legacy `output.mermaid` and `output.html` keys may exist in older config files, but this CLI no longer exposes the old full-generation command that wrote `DEPENDENCIES.md` and configured HTML. `view` always writes `stacklit.html`.
+
+`parse_workers` defaults to `1`. Use `1` to keep sequential compatibility mode with parallel parsing disabled, or use a higher value to parse files concurrently. `generate-json --parse-workers N` overrides the configured value for that run. Values below `1` are invalid. Higher worker counts can reduce wall time on large repositories, but more parser work may be live at once and increase maximum RSS.
 
 `diff` uses differentiated exit codes: `0` means the index is current, `1` means sources changed, and `2` means the command failed.
 

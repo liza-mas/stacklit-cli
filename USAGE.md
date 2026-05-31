@@ -209,9 +209,12 @@ If your team wants `stacklit.json` committed, do not use this post-commit patter
 
 ```bash
 stacklit generate-json -o stacklit.json
+stacklit generate-json --parse-workers 4 -o stacklit.json
 ```
 
 `generate-json` automatically enriches the index from `stacklit-insights.json` when that file exists. Use `--insights <file>` to read a different insights file; if that file is missing, Stacklit warns and continues without insights.
+
+Parser concurrency defaults to `1` worker. A worker count of `1` disables parallel parsing and keeps sequential compatibility mode. Use `.stacklitrc.json` `parse_workers` for durable project configuration, or pass `generate-json --parse-workers N` to override the configured value for one command. Values less than `1` are invalid. Higher worker counts may reduce wall time on large repositories while increasing maximum RSS because more parser work can be live concurrently.
 
 With `--multi`, `generate-json` reads a plain text file of repo paths and writes a combined multi-repo index. The default output is `stacklit-multi.json`; pass `-o <file>` to choose a different multi-index path.
 
@@ -286,6 +289,7 @@ Regenerates `stacklit.html` and opens it in your browser.
 | `stacklit generate-json --insights stacklit-insights.json` | Enrich the generated index from an insights file |
 | `stacklit generate-json --workspace ..` | Record the repo root relative to a workspace root |
 | `stacklit generate-json --multi repos.txt` | Generate a combined `stacklit-multi.json` from repo paths |
+| `stacklit generate-json --parse-workers 4` | Override parser worker count for this run |
 | `stacklit init-insights -i stacklit.json -o stacklit-insights.json` | Seed or update curated insights |
 | `stacklit ai-summary -i stacklit.json -o stacklit-insights.json` | Update AI-generated purposes, hints, and summary in the insights file |
 | `stacklit derive --ai-summary -i stacklit.json` | Print the compact map with the stored AI summary included |
@@ -311,15 +315,18 @@ Create `.stacklitrc.json` in your project root (optional):
   "max_depth": 3,
   "max_modules": 150,
   "max_exports": 15,
+  "parse_workers": 1,
   "output": {
     "json": "stacklit.json"
   }
 }
 ```
 
-Keys: `ignore` (extra paths on top of `.gitignore`), `max_depth` (module detection depth, default 4), `max_modules` (collapse threshold, default 200), `max_exports` (per module, default 10), and `output.json` (default JSON output path).
+Keys: `ignore` (extra paths on top of `.gitignore`), `max_depth` (module detection depth, default 4), `max_modules` (collapse threshold, default 200), `max_exports` (per module, default 10), `parse_workers` (parser worker count, default 1), and `output.json` (default JSON output path).
 
 `stacklit generate-json` and `stacklit diff` honor `output.json` when `-o` or `-i` is not passed. The legacy config keys `output.mermaid` and `output.html` may still be present in old config files, but this CLI no longer has the old full-generation command that wrote `DEPENDENCIES.md` and configured HTML. `stacklit view` always regenerates `stacklit.html` from an index.
+
+`parse_workers` controls how many source files `generate-json` may parse concurrently. The default is `1`, which disables parallel parsing and preserves sequential compatibility mode. Values less than `1` are invalid and fail validation. `generate-json --parse-workers N` takes precedence over `.stacklitrc.json` for that run, including multi-repo generation, so you can benchmark or tune a large repository without editing durable config. Higher values may reduce wall time when parsing is the bottleneck, but they can increase maximum RSS because more parser state may be live at the same time.
 
 ---
 
