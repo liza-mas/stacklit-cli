@@ -1,0 +1,12 @@
+[
+  {
+    "desc": "Bootstrap the repository pre-commit gate for map-reduce downstream tasks.",
+    "done_when": "`.pre-commit-config.yaml` defines local Go hooks for `gofmt` over Go files and `go test ./...`, defines text hygiene hooks for trailing whitespace, end-of-file normalization, YAML syntax, JSON syntax, and markdown-relevant whitespace; `requirements-dev.txt` records `pre-commit==4.6.0`; after provisioning from `requirements-dev.txt` through a project-local environment, `pre-commit run --all-files` exits 0 on the bootstrap commit.",
+    "scope": "May create or edit only `.pre-commit-config.yaml` and `requirements-dev.txt`. Must not touch map-reduce parser, engine, CLI, config, docs, tests, generated assets, or unrelated tooling. Must not install OS packages or unrelated global tooling; if `pre-commit` cannot be provisioned from `requirements-dev.txt` in a project-scoped environment, mark BLOCKED with the exact failing command and stderr.",
+    "spec_ref": "specs/arch-plan/map-reduce/20260531-014127-architecture-main-1-architecture-0.md",
+    "plan_ref": "specs/plans/map-reduce/20260531-072250-architecture-main-1-architecture-0-code-planning-0.md",
+    "validation": [
+      "pre-commit run --all-files"
+    ]
+  }
+]
