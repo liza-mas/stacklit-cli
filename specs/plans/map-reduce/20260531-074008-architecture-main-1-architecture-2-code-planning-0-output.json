@@ -1,0 +1,58 @@
+[
+  {
+    "desc": "Add `.stacklitrc.json` parse worker configuration defaults and validation.",
+    "done_when": "Config loading exposes a top-level JSON key `parse_workers`, `DefaultConfig` yields parse worker count `1`, existing `.stacklitrc.json` files without `parse_workers` still load with default `1`, explicit configured values less than one are rejected through a validation-capable config path with a clear error that names `parse_workers`, and config tests cover default, omitted, valid configured, explicit zero, explicit negative, and compatibility with existing custom config.",
+    "scope": "May edit `internal/config/config.go` and `internal/config/config_test.go`. Must not edit CLI, engine, parser internals, user documentation, benchmark artifacts, or output schemas. Preserve existing `Load(root) *Config` compatibility unless changing it is required by local compile-time API constraints; any new validation-capable API must be consumed by later engine work rather than by config knowing about CLI precedence.",
+    "spec_ref": "specs/arch-plan/map-reduce/20260531-073048-architecture-main-1-architecture-2.md",
+    "plan_ref": "specs/plans/map-reduce/20260531-074008-architecture-main-1-architecture-2-code-planning-0.md",
+    "validation": [
+      "go test ./internal/config"
+    ],
+    "task_depends_on": [
+      "architecture-main-1-architecture-0-code-planning-0-coding-0-gofmt-prereq",
+      "architecture-main-1-architecture-0-code-planning-0-coding-0-precommit-bootstrap"
+    ]
+  },
+  {
+    "desc": "Wire resolved parse worker counts through engine single- and multi-repo scans.",
+    "done_when": "`engine.Options` and `engine.MultiOptions` can carry an optional CLI-sourced parse worker override, `Run` resolves exactly one positive worker count using CLI override first, then `.stacklitrc.json` `parse_workers`, then default `1`, invalid config or override values return clear errors before parser work starts, `Run` calls the upstream parser worker-count-aware parse-all entry point with the resolved count, `RunMulti` forwards the same override into each `Run` call while absent override lets each repo use its own config/default, worker-count config failures in multi-repo scans are fatal rather than warning-only skips, and engine tests cover default resolution, config resolution, CLI-over-config precedence, invalid config, invalid override, and multi-repo forwarding/error behavior.",
+    "scope": "May edit `internal/engine/engine.go` and `internal/engine/engine_test.go`; may consume the config API from Task 1 and the parser worker-count-aware parse-all API from `architecture-main-1-architecture-1-code-planning-0-coding-0`. Must not edit `internal/parser/` worker-pool internals, CLI command construction, user documentation, benchmark artifacts, graph/reduce semantics, renderer/schema formats, or `.stacklitrc.json` documentation.",
+    "spec_ref": "specs/arch-plan/map-reduce/20260531-073048-architecture-main-1-architecture-2.md",
+    "plan_ref": "specs/plans/map-reduce/20260531-074008-architecture-main-1-architecture-2-code-planning-0.md",
+    "validation": [
+      "go test ./internal/config ./internal/engine"
+    ],
+    "depends_on": [
+      "0"
+    ],
+    "task_depends_on": [
+      "architecture-main-1-architecture-1-code-planning-0-coding-0"
+    ]
+  },
+  {
+    "desc": "Expose and forward `generate-json --parse-workers` as a CLI override.",
+    "done_when": "`generate-json` registers an integer `--parse-workers` flag, command execution uses Cobra flag presence to distinguish absent override from a supplied invalid value, supplied positive values are forwarded to `engine.Run` and `engine.RunMulti`, supplied values less than one return a clear CLI error that names `--parse-workers`, absent flag behavior preserves config/default resolution, and CLI tests cover flag registration, invalid supplied zero/negative values, single-repo CLI-over-config precedence, and `--multi` forwarding of the same override.",
+    "scope": "May edit `internal/cli/generate_json.go` and `internal/cli/index_query_test.go`. Must not edit config loading internals, engine resolution internals beyond consuming Task 2 option fields, parser internals, user documentation, benchmark artifacts, or output schemas.",
+    "spec_ref": "specs/arch-plan/map-reduce/20260531-073048-architecture-main-1-architecture-2.md",
+    "plan_ref": "specs/plans/map-reduce/20260531-074008-architecture-main-1-architecture-2-code-planning-0.md",
+    "validation": [
+      "go test ./internal/cli ./internal/engine"
+    ],
+    "depends_on": [
+      "1"
+    ]
+  },
+  {
+    "desc": "Add engine-level normalized output equivalence tests for one-worker and multi-worker scans.",
+    "done_when": "Engine integration tests run fixture repositories through worker count `1` and a worker count greater than `1` for single-repo `Run` and multi-repo `RunMulti` paths, normalize only expected generation metadata such as timestamps, assert semantic `schema.Index` content and `schema.MultiIndex` content are equivalent, assert repeated runs with the same worker count produce identical normalized outputs, and `go test ./internal/engine` exercises those comparisons.",
+    "scope": "May edit `internal/engine/engine_test.go` and add engine-package test helpers in `internal/engine/*_test.go` if needed. Must not edit production graph/reduce logic, parser internals, config/CLI production code, user documentation, benchmark artifacts, or output schemas.",
+    "spec_ref": "specs/arch-plan/map-reduce/20260531-073048-architecture-main-1-architecture-2.md",
+    "plan_ref": "specs/plans/map-reduce/20260531-074008-architecture-main-1-architecture-2-code-planning-0.md",
+    "validation": [
+      "go test ./internal/engine"
+    ],
+    "depends_on": [
+      "1"
+    ]
+  }
+]
