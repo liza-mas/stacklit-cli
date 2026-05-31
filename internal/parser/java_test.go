@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-
 func TestJavaParserParse_Imports(t *testing.T) {
 	p := &TreeSitterParser{}
 

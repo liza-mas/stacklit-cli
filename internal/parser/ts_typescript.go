@@ -18,7 +18,7 @@ func extractTypeScript(root *gts.Node, lang *gts.Language, src []byte, path stri
 	seenExport := map[string]bool{}
 
 	addImport := func(s string) {
-		s = strings.Trim(s, `"'` + "`")
+		s = strings.Trim(s, `"'`+"`")
 		if s != "" && !seenImport[s] {
 			seenImport[s] = true
 			info.Imports = append(info.Imports, s)

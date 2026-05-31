@@ -17,7 +17,7 @@ type Index struct {
 }
 
 type Architecture struct {
-	Pattern string `json:"pattern,omitempty"`   // e.g. "Clean Architecture"
+	Pattern string `json:"pattern,omitempty"`    // e.g. "Clean Architecture"
 	Summary string `json:"ai_summary,omitempty"` // AI-generated narrative
 }
 
@@ -97,14 +97,14 @@ type Hints struct {
 }
 
 type MultiIndex struct {
-	Schema      string        `json:"$schema"`
-	Version     string        `json:"version"`
-	Type        string        `json:"type"` // "polyrepo"
-	GeneratedAt string        `json:"generated_at"`
-	TotalFiles  int           `json:"total_files"`
-	TotalLines  int           `json:"total_lines"`
-	TotalModules int          `json:"total_modules"`
-	Repos       []RepoSummary `json:"repos"`
+	Schema       string        `json:"$schema"`
+	Version      string        `json:"version"`
+	Type         string        `json:"type"` // "polyrepo"
+	GeneratedAt  string        `json:"generated_at"`
+	TotalFiles   int           `json:"total_files"`
+	TotalLines   int           `json:"total_lines"`
+	TotalModules int           `json:"total_modules"`
+	Repos        []RepoSummary `json:"repos"`
 }
 
 type RepoSummary struct {

@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-
 func TestTypeScriptParserParse_ImportsESM(t *testing.T) {
 	p := &TreeSitterParser{}
 

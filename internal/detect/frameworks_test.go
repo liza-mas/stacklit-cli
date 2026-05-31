@@ -17,9 +17,9 @@ func TestDetectFrameworks_ConfigAndImports(t *testing.T) {
 	got := DetectFrameworks(dir, imports)
 
 	want := map[string]bool{
-		"Next.js": true,
-		"React":   true,
-		"Express": true,
+		"Next.js":  true,
+		"React":    true,
+		"Express":  true,
 		"net/http": true,
 	}
 
@@ -58,9 +58,9 @@ func TestDetectFrameworks_PackageJSON(t *testing.T) {
 	got := DetectFrameworks(dir, nil)
 
 	want := map[string]bool{
-		"React":       true,
-		"Express":     true,
-		"Jest":        true,
+		"React":        true,
+		"Express":      true,
+		"Jest":         true,
 		"Tailwind CSS": true,
 	}
 

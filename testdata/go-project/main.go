@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"github.com/example/pkg/handler"
+	"net/http"
 )
 
 func main() {

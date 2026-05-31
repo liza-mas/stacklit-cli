@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-
 func TestRustParserParse_Imports(t *testing.T) {
 	p := &TreeSitterParser{}
 
