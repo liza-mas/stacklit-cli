@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -26,12 +27,14 @@ func TestLoadDefault(t *testing.T) {
 	if cfg.Output.HTML != "stacklit.html" {
 		t.Errorf("expected default output.html=stacklit.html, got %q", cfg.Output.HTML)
 	}
+	if cfg.ParseWorkers != 1 {
+		t.Errorf("expected default parse_workers=1, got %d", cfg.ParseWorkers)
+	}
 }
 
 func TestLoadCustom(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, ".stacklitrc.json"),
-		[]byte(`{"max_depth": 6, "ignore": ["custom/"]}`), 0644)
+	writeConfig(t, dir, `{"max_depth": 6, "ignore": ["custom/"]}`)
 	cfg := Load(dir)
 	if cfg.MaxDepth != 6 {
 		t.Errorf("expected max_depth=6, got %d", cfg.MaxDepth)
@@ -43,11 +46,65 @@ func TestLoadCustom(t *testing.T) {
 	if cfg.MaxModules != 200 {
 		t.Errorf("expected default max_modules=200, got %d", cfg.MaxModules)
 	}
+	if cfg.ParseWorkers != 1 {
+		t.Errorf("expected omitted parse_workers to default to 1, got %d", cfg.ParseWorkers)
+	}
+}
+
+func TestLoadValidatedParseWorkersOmitted(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `{"max_depth": 6, "ignore": ["custom/"]}`)
+
+	cfg, err := LoadValidated(dir)
+	if err != nil {
+		t.Fatalf("expected omitted parse_workers to load, got error: %v", err)
+	}
+	if cfg.ParseWorkers != 1 {
+		t.Fatalf("expected omitted parse_workers to default to 1, got %d", cfg.ParseWorkers)
+	}
+}
+
+func TestLoadValidatedParseWorkersConfigured(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `{"parse_workers": 4}`)
+
+	cfg, err := LoadValidated(dir)
+	if err != nil {
+		t.Fatalf("expected configured parse_workers to load, got error: %v", err)
+	}
+	if cfg.ParseWorkers != 4 {
+		t.Fatalf("expected parse_workers=4, got %d", cfg.ParseWorkers)
+	}
+}
+
+func TestLoadValidatedRejectsInvalidParseWorkers(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{name: "zero", content: `{"parse_workers": 0}`},
+		{name: "negative", content: `{"parse_workers": -2}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeConfig(t, dir, tt.content)
+
+			_, err := LoadValidated(dir)
+			if err == nil {
+				t.Fatal("expected invalid parse_workers to fail validation")
+			}
+			if !strings.Contains(err.Error(), "parse_workers") {
+				t.Fatalf("expected error to name parse_workers, got %q", err.Error())
+			}
+		})
+	}
 }
 
 func TestLoadMalformed(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, ".stacklitrc.json"), []byte(`not json`), 0644)
+	writeConfig(t, dir, `not json`)
 	cfg := Load(dir)
 	// Should fall back to defaults without panicking.
 	if cfg.MaxDepth != 4 {
@@ -71,5 +128,13 @@ func TestScanIgnoreIncludesOutputs(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("expected ignore[%d]=%q, got %q (all=%v)", i, want[i], got[i], got)
 		}
+	}
+}
+
+func writeConfig(t *testing.T, dir string, contents string) {
+	t.Helper()
+
+	if err := os.WriteFile(filepath.Join(dir, ".stacklitrc.json"), []byte(contents), 0644); err != nil {
+		t.Fatalf("write .stacklitrc.json: %v", err)
 	}
 }
