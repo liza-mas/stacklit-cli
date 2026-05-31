@@ -1,0 +1,15 @@
+[
+  {
+    "desc": "Add parser-owned worker-pool parsing while preserving one-worker `ParseAll` compatibility.",
+    "done_when": "Parser package exposes a worker-count-aware parse-all entry point while keeping `ParseAll(paths)` as one-worker compatibility; worker-pool implementation schedules at most the requested positive worker count of concurrent `ParseFile` work, records completions by input index, returns successful `FileInfo` values and per-file errors in input order, keeps jobs/results free of file-content buffers and shared gotreesitter parser/tree/cursor state, and parser tests exercise one-worker compatibility, multi-worker ordering, non-fatal parse-error collection, concurrency bounds via an injected parse function, and `go test -race ./internal/parser` exits 0.",
+    "scope": "May edit `internal/parser/parser.go` and add or edit parser-package tests under `internal/parser/*_test.go`; may inspect but should not change `internal/parser/treesitter.go` or `internal/parser/ts_*.go` unless required to eliminate shared gotreesitter parser/tree/cursor state found during implementation. Must not edit `internal/engine/`, `internal/config/`, `internal/cli/`, graph code, docs, benchmarks, or user configuration.",
+    "spec_ref": "specs/arch-plan/map-reduce/20260531-072218-architecture-main-1-architecture-1.md",
+    "plan_ref": "specs/plans/map-reduce/20260531-073037-architecture-main-1-architecture-1-code-planning-0.md",
+    "validation": [
+      "go test -race ./internal/parser"
+    ],
+    "task_depends_on": [
+      "architecture-main-1-architecture-0-code-planning-0-coding-0"
+    ]
+  }
+]
