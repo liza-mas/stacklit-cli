@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/glincker/stacklit/internal/graph"
 	"github.com/glincker/stacklit/internal/monorepo"
 	"github.com/glincker/stacklit/internal/parser"
+	"github.com/glincker/stacklit/internal/schema"
 )
 
 func TestRunResolvesDefaultParseWorkers(t *testing.T) {
@@ -211,6 +213,39 @@ func TestRunMultiFailsOnInvalidWorkerConfig(t *testing.T) {
 	}
 }
 
+func TestRunNormalizedOutputEquivalentAcrossWorkerCounts(t *testing.T) {
+	root := writeEngineEquivalenceFixtureRepo(t)
+	withWorkingDirectory(t, root)
+
+	oneWorkerFirst := runNormalizedIndex(t, root, 1)
+	oneWorkerSecond := runNormalizedIndex(t, root, 1)
+	multiWorkerFirst := runNormalizedIndex(t, root, 3)
+	multiWorkerSecond := runNormalizedIndex(t, root, 3)
+
+	assertEquivalenceFixtureIndex(t, oneWorkerFirst)
+	assertEqual(t, "one-worker and multi-worker indexes", oneWorkerFirst, multiWorkerFirst)
+	assertEqual(t, "repeated one-worker indexes", oneWorkerFirst, oneWorkerSecond)
+	assertEqual(t, "repeated multi-worker indexes", multiWorkerFirst, multiWorkerSecond)
+}
+
+func TestRunMultiNormalizedOutputEquivalentAcrossWorkerCounts(t *testing.T) {
+	tmpDir := t.TempDir()
+	repoOne := writeNamedEngineEquivalenceFixtureRepo(t, tmpDir, "repo-one")
+	repoTwo := writeNamedEngineEquivalenceFixtureRepo(t, tmpDir, "repo-two")
+	withWorkingDirectory(t, repoOne)
+	reposFile := writeReposFile(t, t.TempDir(), repoOne, repoTwo)
+
+	oneWorkerFirst := runNormalizedMultiIndex(t, reposFile, 1)
+	oneWorkerSecond := runNormalizedMultiIndex(t, reposFile, 1)
+	multiWorkerFirst := runNormalizedMultiIndex(t, reposFile, 3)
+	multiWorkerSecond := runNormalizedMultiIndex(t, reposFile, 3)
+
+	assertEquivalenceFixtureMultiIndex(t, oneWorkerFirst)
+	assertEqual(t, "one-worker and multi-worker multi-indexes", oneWorkerFirst, multiWorkerFirst)
+	assertEqual(t, "repeated one-worker multi-indexes", oneWorkerFirst, oneWorkerSecond)
+	assertEqual(t, "repeated multi-worker multi-indexes", multiWorkerFirst, multiWorkerSecond)
+}
+
 func TestRunJSONOnlyWritesOnlyJSON(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
@@ -281,6 +316,68 @@ func writeNamedEngineFixtureRepo(t *testing.T, parent, name string) string {
 	return root
 }
 
+func writeEngineEquivalenceFixtureRepo(t *testing.T) string {
+	t.Helper()
+	return writeNamedEngineEquivalenceFixtureRepo(t, t.TempDir(), "repo")
+}
+
+func writeNamedEngineEquivalenceFixtureRepo(t *testing.T, parent, name string) string {
+	t.Helper()
+	root := filepath.Join(parent, name)
+	writeFixtureFile(t, root, "go.mod", "module example.com/fixture\n\ngo 1.22\n")
+	writeFixtureFile(t, root, "cmd/app/main.go", `package main
+
+import "example.com/fixture/internal/service"
+
+func main() {
+	service.Run()
+}
+`)
+	writeFixtureFile(t, root, "internal/api/routes.go", `package api
+
+import "example.com/fixture/internal/service"
+
+func Routes() []string {
+	service.Run()
+	return []string{"/health"}
+}
+`)
+	writeFixtureFile(t, root, "internal/service/service.go", `package service
+
+import "example.com/fixture/internal/store"
+
+type Handler struct {
+	Store store.Store
+}
+
+func Run() Handler {
+	return Handler{Store: store.Store{Name: "primary"}}
+}
+`)
+	writeFixtureFile(t, root, "internal/store/store.go", `package store
+
+type Store struct {
+	Name string
+}
+
+func Open() Store {
+	return Store{Name: "primary"}
+}
+`)
+	return root
+}
+
+func writeFixtureFile(t *testing.T, root, relPath, content string) {
+	t.Helper()
+	path := filepath.Join(root, relPath)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("creating fixture dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("writing fixture file %s: %v", relPath, err)
+	}
+}
+
 func writeReposFile(t *testing.T, dir string, repos ...string) string {
 	t.Helper()
 	reposFile := filepath.Join(dir, "repos.txt")
@@ -292,6 +389,113 @@ func writeReposFile(t *testing.T, dir string, repos ...string) string {
 
 func intPtr(v int) *int {
 	return &v
+}
+
+func withWorkingDirectory(t *testing.T, dir string) {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getting working directory: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("changing working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(wd); err != nil {
+			t.Fatalf("restoring working directory: %v", err)
+		}
+	})
+}
+
+func runNormalizedIndex(t *testing.T, root string, workerCount int) schema.Index {
+	t.Helper()
+	result, err := Run(Options{
+		Root:                 root,
+		Quiet:                true,
+		JSONOnly:             true,
+		JSONOutput:           filepath.Join(t.TempDir(), "stacklit.json"),
+		ParseWorkersOverride: intPtr(workerCount),
+	})
+	if err != nil {
+		t.Fatalf("Run with %d parse workers returned error: %v", workerCount, err)
+	}
+	if result.Index == nil {
+		t.Fatalf("Run with %d parse workers returned nil index", workerCount)
+	}
+	return normalizeIndexForEquivalence(*result.Index)
+}
+
+func normalizeIndexForEquivalence(idx schema.Index) schema.Index {
+	idx.GeneratedAt = ""
+	return idx
+}
+
+func runNormalizedMultiIndex(t *testing.T, reposFile string, workerCount int) schema.MultiIndex {
+	t.Helper()
+	outputPath := filepath.Join(t.TempDir(), "stacklit-multi.json")
+	result, err := RunMulti(MultiOptions{
+		ReposFile:            reposFile,
+		OutputPath:           outputPath,
+		Quiet:                true,
+		JSONOnly:             true,
+		ParseWorkersOverride: intPtr(workerCount),
+	})
+	if err != nil {
+		t.Fatalf("RunMulti with %d parse workers returned error: %v", workerCount, err)
+	}
+	if result.RepoCount != 2 {
+		t.Fatalf("expected RunMulti to scan 2 repos, got %d", result.RepoCount)
+	}
+
+	raw, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading multi output: %v", err)
+	}
+	var multi schema.MultiIndex
+	if err := json.Unmarshal(raw, &multi); err != nil {
+		t.Fatalf("decoding multi output: %v", err)
+	}
+	return normalizeMultiIndexForEquivalence(multi)
+}
+
+func normalizeMultiIndexForEquivalence(multi schema.MultiIndex) schema.MultiIndex {
+	multi.GeneratedAt = ""
+	return multi
+}
+
+func assertEquivalenceFixtureIndex(t *testing.T, idx schema.Index) {
+	t.Helper()
+	if idx.Structure.TotalFiles != 4 {
+		t.Fatalf("expected fixture index to include 4 source files, got %d", idx.Structure.TotalFiles)
+	}
+	if len(idx.Modules) == 0 {
+		t.Fatal("expected fixture index to include modules")
+	}
+	if len(idx.Dependencies.Edges) == 0 {
+		t.Fatal("expected fixture index to include dependency edges")
+	}
+}
+
+func assertEquivalenceFixtureMultiIndex(t *testing.T, multi schema.MultiIndex) {
+	t.Helper()
+	if len(multi.Repos) != 2 {
+		t.Fatalf("expected multi-index to include 2 repos, got %d", len(multi.Repos))
+	}
+	if multi.TotalFiles != 8 {
+		t.Fatalf("expected multi-index to include 8 source files, got %d", multi.TotalFiles)
+	}
+	for _, repo := range multi.Repos {
+		if len(repo.Modules) == 0 {
+			t.Fatalf("expected repo %q to include modules", repo.Name)
+		}
+	}
+}
+
+func assertEqual(t *testing.T, label string, want, got any) {
+	t.Helper()
+	if !reflect.DeepEqual(want, got) {
+		t.Fatalf("expected %s to match\nwant: %+v\ngot:  %+v", label, want, got)
+	}
 }
 
 func TestRunJSONOnlyPreservesAbsoluteJSONOutput(t *testing.T) {
