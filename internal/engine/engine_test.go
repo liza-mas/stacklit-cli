@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -13,6 +14,181 @@ import (
 	"github.com/glincker/stacklit/internal/monorepo"
 	"github.com/glincker/stacklit/internal/parser"
 )
+
+func TestRunResolvesDefaultParseWorkers(t *testing.T) {
+	root := writeEngineFixtureRepo(t)
+	gotCounts := captureParseWorkerCounts(t)
+
+	if _, err := Run(Options{
+		Root:      root,
+		Quiet:     true,
+		SkipWrite: true,
+	}); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(*gotCounts, []int{1}) {
+		t.Fatalf("expected default parse worker count 1, got %v", *gotCounts)
+	}
+}
+
+func TestRunUsesConfiguredParseWorkers(t *testing.T) {
+	root := writeEngineFixtureRepo(t)
+	if err := os.WriteFile(filepath.Join(root, ".stacklitrc.json"), []byte(`{"parse_workers":3}`), 0644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+	gotCounts := captureParseWorkerCounts(t)
+
+	if _, err := Run(Options{
+		Root:      root,
+		Quiet:     true,
+		SkipWrite: true,
+	}); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(*gotCounts, []int{3}) {
+		t.Fatalf("expected configured parse worker count 3, got %v", *gotCounts)
+	}
+}
+
+func TestRunParseWorkersOverridePrecedesConfig(t *testing.T) {
+	root := writeEngineFixtureRepo(t)
+	if err := os.WriteFile(filepath.Join(root, ".stacklitrc.json"), []byte(`{"parse_workers":2}`), 0644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+	gotCounts := captureParseWorkerCounts(t)
+
+	if _, err := Run(Options{
+		Root:                 root,
+		Quiet:                true,
+		SkipWrite:            true,
+		ParseWorkersOverride: intPtr(4),
+	}); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(*gotCounts, []int{4}) {
+		t.Fatalf("expected override parse worker count 4, got %v", *gotCounts)
+	}
+}
+
+func TestRunRejectsInvalidConfiguredParseWorkers(t *testing.T) {
+	root := writeEngineFixtureRepo(t)
+	if err := os.WriteFile(filepath.Join(root, ".stacklitrc.json"), []byte(`{"parse_workers":0}`), 0644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+	gotCounts := captureParseWorkerCounts(t)
+
+	_, err := Run(Options{
+		Root:      root,
+		Quiet:     true,
+		SkipWrite: true,
+	})
+	if err == nil {
+		t.Fatal("expected invalid parse_workers config error")
+	}
+	if !strings.Contains(err.Error(), "parse_workers") {
+		t.Fatalf("expected error to name parse_workers, got %v", err)
+	}
+	if len(*gotCounts) != 0 {
+		t.Fatalf("expected parser not to run for invalid config, got counts %v", *gotCounts)
+	}
+}
+
+func TestRunRejectsInvalidParseWorkersOverride(t *testing.T) {
+	root := writeEngineFixtureRepo(t)
+	gotCounts := captureParseWorkerCounts(t)
+
+	_, err := Run(Options{
+		Root:                 root,
+		Quiet:                true,
+		SkipWrite:            true,
+		ParseWorkersOverride: intPtr(0),
+	})
+	if err == nil {
+		t.Fatal("expected invalid parse worker override error")
+	}
+	if !strings.Contains(err.Error(), "parse_workers") {
+		t.Fatalf("expected error to name parse_workers, got %v", err)
+	}
+	if len(*gotCounts) != 0 {
+		t.Fatalf("expected parser not to run for invalid override, got counts %v", *gotCounts)
+	}
+}
+
+func TestRunMultiUsesPerRepoParseWorkersWhenOverrideAbsent(t *testing.T) {
+	tmpDir := t.TempDir()
+	repoDefault := writeNamedEngineFixtureRepo(t, tmpDir, "repo-default")
+	repoConfigured := writeNamedEngineFixtureRepo(t, tmpDir, "repo-configured")
+	if err := os.WriteFile(filepath.Join(repoConfigured, ".stacklitrc.json"), []byte(`{"parse_workers":3}`), 0644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+	reposFile := writeReposFile(t, tmpDir, repoDefault, repoConfigured)
+	gotCounts := captureParseWorkerCounts(t)
+
+	if _, err := RunMulti(MultiOptions{
+		ReposFile:  reposFile,
+		OutputPath: filepath.Join(tmpDir, "stacklit-multi.json"),
+		Quiet:      true,
+	}); err != nil {
+		t.Fatalf("RunMulti returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(*gotCounts, []int{1, 3}) {
+		t.Fatalf("expected per-repo parse worker counts [1 3], got %v", *gotCounts)
+	}
+}
+
+func TestRunMultiForwardsParseWorkersOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	repoOne := writeNamedEngineFixtureRepo(t, tmpDir, "repo-one")
+	repoTwo := writeNamedEngineFixtureRepo(t, tmpDir, "repo-two")
+	if err := os.WriteFile(filepath.Join(repoTwo, ".stacklitrc.json"), []byte(`{"parse_workers":3}`), 0644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+	reposFile := writeReposFile(t, tmpDir, repoOne, repoTwo)
+	gotCounts := captureParseWorkerCounts(t)
+
+	if _, err := RunMulti(MultiOptions{
+		ReposFile:            reposFile,
+		OutputPath:           filepath.Join(tmpDir, "stacklit-multi.json"),
+		Quiet:                true,
+		ParseWorkersOverride: intPtr(2),
+	}); err != nil {
+		t.Fatalf("RunMulti returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(*gotCounts, []int{2, 2}) {
+		t.Fatalf("expected forwarded parse worker counts [2 2], got %v", *gotCounts)
+	}
+}
+
+func TestRunMultiFailsOnInvalidWorkerConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	repoInvalid := writeNamedEngineFixtureRepo(t, tmpDir, "repo-invalid")
+	repoValid := writeNamedEngineFixtureRepo(t, tmpDir, "repo-valid")
+	if err := os.WriteFile(filepath.Join(repoInvalid, ".stacklitrc.json"), []byte(`{"parse_workers":0}`), 0644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+	reposFile := writeReposFile(t, tmpDir, repoInvalid, repoValid)
+	gotCounts := captureParseWorkerCounts(t)
+
+	_, err := RunMulti(MultiOptions{
+		ReposFile:  reposFile,
+		OutputPath: filepath.Join(tmpDir, "stacklit-multi.json"),
+		Quiet:      true,
+	})
+	if err == nil {
+		t.Fatal("expected RunMulti to fail on invalid worker config")
+	}
+	if !strings.Contains(err.Error(), "parse_workers") {
+		t.Fatalf("expected error to name parse_workers, got %v", err)
+	}
+	if len(*gotCounts) != 0 {
+		t.Fatalf("expected parser not to run after invalid worker config, got counts %v", *gotCounts)
+	}
+}
 
 func TestRunJSONOnlyWritesOnlyJSON(t *testing.T) {
 	root := t.TempDir()
@@ -42,6 +218,59 @@ func TestRunJSONOnlyWritesOnlyJSON(t *testing.T) {
 			t.Fatalf("expected %s not to be written, stat error: %v", path, err)
 		}
 	}
+}
+
+func captureParseWorkerCounts(t *testing.T) *[]int {
+	t.Helper()
+	original := parseAllWithWorkers
+	var counts []int
+	parseAllWithWorkers = func(paths []string, workerCount int) ([]*parser.FileInfo, []error) {
+		counts = append(counts, workerCount)
+		infos := make([]*parser.FileInfo, 0, len(paths))
+		for _, path := range paths {
+			infos = append(infos, &parser.FileInfo{
+				Path:      path,
+				Language:  "Go",
+				LineCount: 1,
+			})
+		}
+		return infos, nil
+	}
+	t.Cleanup(func() {
+		parseAllWithWorkers = original
+	})
+	return &counts
+}
+
+func writeEngineFixtureRepo(t *testing.T) string {
+	t.Helper()
+	tmpDir := t.TempDir()
+	return writeNamedEngineFixtureRepo(t, tmpDir, "repo")
+}
+
+func writeNamedEngineFixtureRepo(t *testing.T, parent, name string) string {
+	t.Helper()
+	root := filepath.Join(parent, name)
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatalf("creating fixture root: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	return root
+}
+
+func writeReposFile(t *testing.T, dir string, repos ...string) string {
+	t.Helper()
+	reposFile := filepath.Join(dir, "repos.txt")
+	if err := os.WriteFile(reposFile, []byte(strings.Join(repos, "\n")+"\n"), 0644); err != nil {
+		t.Fatalf("writing repos file: %v", err)
+	}
+	return reposFile
+}
+
+func intPtr(v int) *int {
+	return &v
 }
 
 func TestRunJSONOnlyPreservesAbsoluteJSONOutput(t *testing.T) {

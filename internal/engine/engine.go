@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,14 +24,15 @@ import (
 
 // Options configures an engine Run.
 type Options struct {
-	Root                string
-	Workspace           string
-	Quiet               bool
-	JSONOnly            bool
-	SkipWrite           bool
-	JSONOutput          string
-	InsightsPath        string
-	WarnMissingInsights bool
+	Root                 string
+	Workspace            string
+	Quiet                bool
+	JSONOnly             bool
+	SkipWrite            bool
+	JSONOutput           string
+	InsightsPath         string
+	WarnMissingInsights  bool
+	ParseWorkersOverride *int
 }
 
 // Result holds the output paths and assembled index from a Run.
@@ -70,6 +72,42 @@ var purposeMap = map[string]string{
 	"monorepo":   "Monorepo detection",
 	"detect":     "Framework and tool detection",
 	"summary":    "AI-powered codebase summaries",
+}
+
+var parseAllWithWorkers = parser.ParseAllWithWorkers
+
+type parseWorkerCountError struct {
+	err error
+}
+
+func (e *parseWorkerCountError) Error() string {
+	return e.err.Error()
+}
+
+func (e *parseWorkerCountError) Unwrap() error {
+	return e.err
+}
+
+func newParseWorkerCountError(format string, args ...any) error {
+	return &parseWorkerCountError{err: fmt.Errorf(format, args...)}
+}
+
+func isParseWorkerCountError(err error) bool {
+	var target *parseWorkerCountError
+	return errors.As(err, &target)
+}
+
+func resolveParseWorkers(cfg *config.Config, override *int) (int, error) {
+	if override != nil {
+		if *override < 1 {
+			return 0, newParseWorkerCountError("parse_workers override must be at least 1")
+		}
+		return *override, nil
+	}
+	if cfg.ParseWorkers < 1 {
+		return 0, newParseWorkerCountError("parse_workers must be at least 1")
+	}
+	return cfg.ParseWorkers, nil
 }
 
 // inferPurpose returns a human-readable description for a module path.
@@ -217,9 +255,16 @@ func Run(opts Options) (*Result, error) {
 	}
 
 	// 1a. Load config (best-effort; uses defaults if absent).
-	cfg := config.Load(root)
+	cfg, err := config.LoadValidated(root)
+	if err != nil {
+		return nil, newParseWorkerCountError("loading .stacklitrc.json: %w", err)
+	}
 	if opts.JSONOutput != "" {
 		cfg.Output.JSON = opts.JSONOutput
+	}
+	parseWorkers, err := resolveParseWorkers(cfg, opts.ParseWorkersOverride)
+	if err != nil {
+		return nil, err
 	}
 
 	// 2. Detect monorepo layout.
@@ -242,7 +287,7 @@ func Run(opts Options) (*Result, error) {
 	}
 
 	// 4. Parse all files.
-	parsed, parseErrs := parser.ParseAll(files)
+	parsed, parseErrs := parseAllWithWorkers(files, parseWorkers)
 	if !opts.Quiet {
 		fmt.Printf("[stacklit] parsed %d files (%d errors)\n", len(parsed), len(parseErrs))
 	}
@@ -351,13 +396,14 @@ func Run(opts Options) (*Result, error) {
 
 // MultiOptions configures a RunMulti call.
 type MultiOptions struct {
-	ReposFile           string
-	Quiet               bool
-	Workspace           string
-	JSONOnly            bool
-	OutputPath          string
-	InsightsPath        string
-	WarnMissingInsights bool
+	ReposFile            string
+	Quiet                bool
+	Workspace            string
+	JSONOnly             bool
+	OutputPath           string
+	InsightsPath         string
+	WarnMissingInsights  bool
+	ParseWorkersOverride *int
 }
 
 // MultiResult holds the output of a RunMulti call.
@@ -394,14 +440,18 @@ func RunMulti(opts MultiOptions) (*MultiResult, error) {
 			fmt.Printf("[stacklit] scanning %s...\n", repo)
 		}
 		result, err := Run(Options{
-			Root:                repo,
-			Quiet:               true,
-			Workspace:           opts.Workspace,
-			JSONOnly:            opts.JSONOnly,
-			InsightsPath:        opts.InsightsPath,
-			WarnMissingInsights: opts.WarnMissingInsights,
+			Root:                 repo,
+			Quiet:                true,
+			Workspace:            opts.Workspace,
+			JSONOnly:             opts.JSONOnly,
+			InsightsPath:         opts.InsightsPath,
+			WarnMissingInsights:  opts.WarnMissingInsights,
+			ParseWorkersOverride: opts.ParseWorkersOverride,
 		})
 		if err != nil {
+			if isParseWorkerCountError(err) {
+				return nil, fmt.Errorf("scanning %s: %w", repo, err)
+			}
 			fmt.Printf("[stacklit] warning: failed to scan %s: %v\n", repo, err)
 			continue
 		}
