@@ -94,13 +94,103 @@ func TestDeriveAISummaryRequiresSummary(t *testing.T) {
 
 func TestGenerateJSONExposesIndexingFlags(t *testing.T) {
 	cmd := newGenerateJSONCmd()
-	for _, name := range []string{"workspace", "multi", "insights"} {
+	for _, name := range []string{"workspace", "multi", "insights", "parse-workers"} {
 		if flag := cmd.Flags().Lookup(name); flag == nil {
 			t.Fatalf("generate-json should expose --%s", name)
 		}
 	}
+	if flag := cmd.Flags().Lookup("parse-workers"); flag.Value.Type() != "int" {
+		t.Fatalf("expected --parse-workers to be an int flag, got %q", flag.Value.Type())
+	}
 	if flag := cmd.Flags().Lookup("summary"); flag != nil {
 		t.Fatal("generate-json should not expose --summary")
+	}
+}
+
+func TestGenerateJSONRejectsInvalidParseWorkersFlag(t *testing.T) {
+	for _, value := range []string{"0", "-2"} {
+		t.Run(value, func(t *testing.T) {
+			root := t.TempDir()
+			restoreWorkingDirectory(t, root)
+			writeGenerateJSONFixture(t, root)
+
+			cmd := newGenerateJSONCmd()
+			cmd.SetArgs([]string{"--parse-workers", value, "-o", "stacklit.json"})
+			err := cmd.Execute()
+			if err == nil {
+				t.Fatal("expected invalid --parse-workers value to fail")
+			}
+			if !strings.Contains(err.Error(), "--parse-workers") {
+				t.Fatalf("expected error to name --parse-workers, got %v", err)
+			}
+		})
+	}
+}
+
+func TestGenerateJSONParseWorkersFlagPrecedesConfig(t *testing.T) {
+	root := t.TempDir()
+	restoreWorkingDirectory(t, root)
+	writeGenerateJSONFixture(t, root)
+	if err := os.WriteFile(filepath.Join(root, ".stacklitrc.json"), []byte(`{"parse_workers":0}`), 0644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+
+	cmd := newGenerateJSONCmd()
+	cmd.SetArgs([]string{"--parse-workers", "2", "-o", "stacklit.json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("generate-json with CLI parse worker override returned error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "stacklit.json")); err != nil {
+		t.Fatalf("expected generated index to exist: %v", err)
+	}
+}
+
+func TestGenerateJSONMultiForwardsParseWorkersFlag(t *testing.T) {
+	root := t.TempDir()
+	restoreWorkingDirectory(t, root)
+
+	repoOne := filepath.Join(root, "repo-one")
+	repoTwo := filepath.Join(root, "repo-two")
+	writeGenerateJSONFixture(t, repoOne)
+	writeGenerateJSONFixture(t, repoTwo)
+	if err := os.WriteFile(filepath.Join(repoTwo, ".stacklitrc.json"), []byte(`{"parse_workers":0}`), 0644); err != nil {
+		t.Fatalf("writing repo config: %v", err)
+	}
+
+	reposFile := filepath.Join(root, "repos.txt")
+	if err := os.WriteFile(reposFile, []byte(repoOne+"\n"+repoTwo+"\n"), 0644); err != nil {
+		t.Fatalf("writing repos file: %v", err)
+	}
+
+	cmd := newGenerateJSONCmd()
+	cmd.SetArgs([]string{"--multi", reposFile, "--parse-workers", "2", "-o", "stacklit-multi.json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("generate-json --multi with parse worker override returned error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "stacklit-multi.json")); err != nil {
+		t.Fatalf("expected generated multi index to exist: %v", err)
+	}
+}
+
+func TestGenerateJSONAbsentParseWorkersFlagUsesConfigValidation(t *testing.T) {
+	root := t.TempDir()
+	restoreWorkingDirectory(t, root)
+	writeGenerateJSONFixture(t, root)
+	if err := os.WriteFile(filepath.Join(root, ".stacklitrc.json"), []byte(`{"parse_workers":0}`), 0644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+
+	cmd := newGenerateJSONCmd()
+	cmd.SetArgs([]string{"-o", "stacklit.json"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected invalid configured parse_workers to fail without CLI override")
+	}
+	if !strings.Contains(err.Error(), "parse_workers") {
+		t.Fatalf("expected error to name parse_workers, got %v", err)
+	}
+	if strings.Contains(err.Error(), "--parse-workers") {
+		t.Fatalf("expected config error without CLI flag, got %v", err)
 	}
 }
 
@@ -285,6 +375,16 @@ func restoreWorkingDirectory(t *testing.T, dir string) {
 			t.Fatalf("restoring working directory: %v", err)
 		}
 	})
+}
+
+func writeGenerateJSONFixture(t *testing.T, root string) {
+	t.Helper()
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatalf("creating fixture root: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
 }
 
 func TestFindModulesSortedAndLimited(t *testing.T) {
