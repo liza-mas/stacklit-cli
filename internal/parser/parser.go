@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"strings"
+	"sync"
 )
 
 // FileInfo holds the result of parsing a source file.
@@ -53,21 +54,80 @@ func ParseFile(path string) (*FileInfo, error) {
 	return g.Parse(path, content)
 }
 
-// ParseAll parses multiple files and returns all results.
+type parseFunc func(path string) (*FileInfo, error)
+
+type parseJob struct {
+	index int
+	path  string
+}
+
+type parseResult struct {
+	index int
+	info  *FileInfo
+	err   error
+}
+
+// ParseAll parses multiple files with one worker and returns all results.
 // Errors from individual files are collected and non-fatal.
 func ParseAll(paths []string) ([]*FileInfo, []error) {
-	results := make([]*FileInfo, 0, len(paths))
-	var errs []error
+	return ParseAllWithWorkers(paths, 1)
+}
 
-	for _, path := range paths {
-		info, err := ParseFile(path)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		results = append(results, info)
+// ParseAllWithWorkers parses multiple files with up to workerCount concurrent parse calls.
+// Callers are expected to pass a positive worker count; non-positive values fall back to one worker.
+func ParseAllWithWorkers(paths []string, workerCount int) ([]*FileInfo, []error) {
+	return parseAllWithWorkers(paths, workerCount, ParseFile)
+}
+
+func parseAllWithWorkers(paths []string, workerCount int, parse parseFunc) ([]*FileInfo, []error) {
+	if workerCount < 1 {
+		workerCount = 1
+	}
+	if workerCount > len(paths) {
+		workerCount = len(paths)
 	}
 
+	orderedResults := make([]parseResult, len(paths))
+	if len(paths) == 0 {
+		return make([]*FileInfo, 0), nil
+	}
+
+	jobs := make(chan parseJob, len(paths))
+	completions := make(chan parseResult, len(paths))
+	for index, path := range paths {
+		jobs <- parseJob{index: index, path: path}
+	}
+	close(jobs)
+
+	var wg sync.WaitGroup
+	for range workerCount {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				info, err := parse(job.path)
+				completions <- parseResult{index: job.index, info: info, err: err}
+			}
+		}()
+	}
+	wg.Wait()
+	close(completions)
+
+	for completion := range completions {
+		orderedResults[completion.index] = completion
+	}
+
+	results := make([]*FileInfo, 0, len(paths))
+	var errs []error
+	for _, result := range orderedResults {
+		if result.err != nil {
+			errs = append(errs, result.err)
+			continue
+		}
+		if result.info != nil {
+			results = append(results, result.info)
+		}
+	}
 	return results, errs
 }
 
