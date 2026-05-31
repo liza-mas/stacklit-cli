@@ -73,6 +73,27 @@ func TestRunParseWorkersOverridePrecedesConfig(t *testing.T) {
 	}
 }
 
+func TestRunParseWorkersOverridePrecedesInvalidConfig(t *testing.T) {
+	root := writeEngineFixtureRepo(t)
+	if err := os.WriteFile(filepath.Join(root, ".stacklitrc.json"), []byte(`{"parse_workers":0}`), 0644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+	gotCounts := captureParseWorkerCounts(t)
+
+	if _, err := Run(Options{
+		Root:                 root,
+		Quiet:                true,
+		SkipWrite:            true,
+		ParseWorkersOverride: intPtr(4),
+	}); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(*gotCounts, []int{4}) {
+		t.Fatalf("expected override parse worker count 4, got %v", *gotCounts)
+	}
+}
+
 func TestRunRejectsInvalidConfiguredParseWorkers(t *testing.T) {
 	root := writeEngineFixtureRepo(t)
 	if err := os.WriteFile(filepath.Join(root, ".stacklitrc.json"), []byte(`{"parse_workers":0}`), 0644); err != nil {

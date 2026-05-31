@@ -254,10 +254,16 @@ func Run(opts Options) (*Result, error) {
 		return nil, fmt.Errorf("resolving root: %w", err)
 	}
 
-	// 1a. Load config (best-effort; uses defaults if absent).
-	cfg, err := config.LoadValidated(root)
-	if err != nil {
-		return nil, newParseWorkerCountError("loading .stacklitrc.json: %w", err)
+	// 1a. Load config. A CLI override takes parse-worker precedence over config,
+	// so only validate configured parse_workers when no override is present.
+	var cfg *config.Config
+	if opts.ParseWorkersOverride != nil {
+		cfg = config.Load(root)
+	} else {
+		cfg, err = config.LoadValidated(root)
+		if err != nil {
+			return nil, newParseWorkerCountError("loading .stacklitrc.json: %w", err)
+		}
 	}
 	if opts.JSONOutput != "" {
 		cfg.Output.JSON = opts.JSONOutput
