@@ -1,0 +1,36 @@
+[
+  {
+    "desc": "Update README and USAGE documentation for parse worker controls and memory tradeoffs.",
+    "done_when": "`README.md` gives a concise `generate-json --parse-workers` and `.stacklitrc.json` `parse_workers` summary, `USAGE.md` gives the detailed command and configuration reference, both documents state default worker count `1`, explain that worker count `1` disables parallel parsing as sequential compatibility mode, describe CLI-over-config precedence, mention that values less than one are invalid, and warn that higher worker counts may reduce wall time while increasing maximum RSS.",
+    "scope": "May edit `README.md` and `USAGE.md`. Must not edit parser, config, CLI, engine, graph, renderer, schema, benchmark artifacts, generated JSON outputs, or test fixtures. TDD is not required because this is a documentation-only task.",
+    "spec_ref": "specs/arch-plan/map-reduce/20260531-074032-architecture-main-1-architecture-3.md",
+    "plan_ref": "specs/plans/map-reduce/20260531-075015-architecture-main-1-architecture-3-code-planning-0.md",
+    "validation": [
+      "go test ./..."
+    ],
+    "task_depends_on": [
+      "architecture-main-1-architecture-2-code-planning-0-coding-2"
+    ]
+  },
+  {
+    "desc": "Record benchmark evidence for parse worker counts 1, 2, 4, and 8.",
+    "done_when": "`specs/benchmarks/map-reduce/` contains a markdown benchmark report plus `worker-1.cpu.pprof`, `worker-2.cpu.pprof`, `worker-4.cpu.pprof`, and `worker-8.cpu.pprof`; the report identifies Omni or an equivalent large mixed-language repository and its fixed repository state, records the Stacklit build or commit used, records the exact benchmark commands for worker counts 1, 2, 4, and 8, reports wall time and maximum RSS from `/usr/bin/time -v` for each worker count, records CPU-profile top evidence for each worker count, keeps generated JSON outputs in `/tmp/stacklit-workers-{1,2,4,8}.json` instead of committing them, and all four committed CPU profile files are readable by `go tool pprof -top`.",
+    "scope": "May add files under `specs/benchmarks/map-reduce/`, including the benchmark report and the four `worker-{1,2,4,8}.cpu.pprof` files. Must not edit `README.md`, `USAGE.md`, parser, config, CLI, engine, graph, renderer, schema, generated JSON outputs, or product profiling behavior. TDD is not required because this task records benchmark evidence rather than changing product behavior.",
+    "spec_ref": "specs/arch-plan/map-reduce/20260531-074032-architecture-main-1-architecture-3.md",
+    "plan_ref": "specs/plans/map-reduce/20260531-075015-architecture-main-1-architecture-3-code-planning-0.md",
+    "validation": [
+      "go test ./...",
+      "/usr/bin/time -v stacklit generate-json --parse-workers 1 -o /tmp/stacklit-workers-1.json",
+      "/usr/bin/time -v stacklit generate-json --parse-workers 2 -o /tmp/stacklit-workers-2.json",
+      "/usr/bin/time -v stacklit generate-json --parse-workers 4 -o /tmp/stacklit-workers-4.json",
+      "/usr/bin/time -v stacklit generate-json --parse-workers 8 -o /tmp/stacklit-workers-8.json",
+      "go tool pprof -top specs/benchmarks/map-reduce/worker-1.cpu.pprof",
+      "go tool pprof -top specs/benchmarks/map-reduce/worker-2.cpu.pprof",
+      "go tool pprof -top specs/benchmarks/map-reduce/worker-4.cpu.pprof",
+      "go tool pprof -top specs/benchmarks/map-reduce/worker-8.cpu.pprof"
+    ],
+    "task_depends_on": [
+      "architecture-main-1-architecture-2-code-planning-0-coding-2"
+    ]
+  }
+]
