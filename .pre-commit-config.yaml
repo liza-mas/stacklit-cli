@@ -1,9 +1,12 @@
+default_stages: [pre-commit]
+fail_fast: false
+
 repos:
   - repo: local
     hooks:
       - id: gofmt
         name: gofmt
-        entry: gofmt -w
+        entry: gofmt -w -l
         language: system
         types: [go]
       - id: go-test
@@ -11,11 +14,22 @@ repos:
         entry: go test ./...
         language: system
         pass_filenames: false
+      - id: go-vet
+        name: go vet
+        entry: go vet ./...
+        language: system
+        files: \.go$
+        pass_filenames: false
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      - id: check-merge-conflict
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-json
+      - id: check-toml
+  - repo: meta
+    hooks:
+      - id: check-useless-excludes
