@@ -24,6 +24,7 @@ func init() {
 	rootCmd.AddCommand(newGenerateJSONCmd())
 	rootCmd.AddCommand(newInitInsightsCmd())
 	rootCmd.AddCommand(newAISummaryCmd())
+	rootCmd.AddCommand(newExportArchitectureCmd())
 	rootCmd.AddCommand(newFindModuleCmd())
 	rootCmd.AddCommand(newGetDependenciesCmd())
 	rootCmd.AddCommand(newGetHintsCmd())

@@ -254,6 +254,7 @@ stacklit get-module internal/cli -i stacklit.json  # inspect one module
 stacklit get-dependencies internal/cli -i stacklit.json  # module dependency edges
 stacklit get-hints -i stacklit.json       # workflow hints
 stacklit get-hot-files -i stacklit.json   # git churn hotspots
+stacklit export-architecture -i stacklit.json -o architecture.json # export architecture structure
 stacklit view -i stacklit.json   # regenerate HTML from an index, open in browser
 stacklit diff -i stacklit.json   # check if an index is stale
 stacklit derive -i stacklit.json # print compact nav map (~250 tokens)

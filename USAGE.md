@@ -298,6 +298,7 @@ Regenerates `stacklit.html` and opens it in your browser.
 | `stacklit get-dependencies internal/cli -i stacklit.json` | Get dependency edges for a module |
 | `stacklit get-hints -i stacklit.json` | Get workflow hints |
 | `stacklit get-hot-files -i stacklit.json` | Get git churn hotspots |
+| `stacklit export-architecture -i stacklit.json -o architecture.json` | Export architecture structure from an index |
 | `stacklit view -i stacklit.json` | Regenerate HTML from an index and open in browser |
 | `stacklit diff -i stacklit.json` | Check if an index is stale |
 | `stacklit derive -i stacklit.json` | Print compact navigation map (~250 tokens) to stdout |
@@ -413,6 +414,8 @@ Agent-actionable instructions generated from codebase analysis.
 ### Query commands
 
 `find-module <query>` searches both module names and module purposes. Results are sorted by module name and capped at five matches so the output stays compact.
+
+`export-architecture` reads only the supplied Stacklit index and emits `stacklit.architecture-export.v1` JSON. Use `-o` to write the artifact to a file; omit `-o` to print it to stdout.
 
 ---
 

@@ -21,17 +21,22 @@ func addInputFlag(cmd *cobra.Command, opts *indexCommandOptions) {
 	cmd.Flags().StringVarP(&opts.input, "input", "i", defaultIndexPath, "Path to the stacklit JSON index")
 }
 
-func loadIndexFile(path string) (*schema.Index, error) {
+func loadIndexData(path string) ([]byte, *schema.Index, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("could not read %s: %w", path, err)
+		return nil, nil, fmt.Errorf("could not read %s: %w", path, err)
 	}
 
 	var idx schema.Index
 	if err := json.Unmarshal(data, &idx); err != nil {
-		return nil, fmt.Errorf("could not parse %s: %w", path, err)
+		return nil, nil, fmt.Errorf("could not parse %s: %w", path, err)
 	}
-	return &idx, nil
+	return data, &idx, nil
+}
+
+func loadIndexFile(path string) (*schema.Index, error) {
+	_, idx, err := loadIndexData(path)
+	return idx, err
 }
 
 func printJSON(v any) error {

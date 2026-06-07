@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/glincker/stacklit/internal/archexport"
 	"github.com/glincker/stacklit/internal/insights"
 	"github.com/glincker/stacklit/internal/schema"
 	"github.com/spf13/cobra"
@@ -21,6 +24,7 @@ func TestIndexInputFlags(t *testing.T) {
 		{name: "view", cmd: viewCmd, wantDefault: defaultIndexPath},
 		{name: "diff", cmd: newDiffCmd(), wantDefault: ""},
 		{name: "derive", cmd: newDeriveCmd(), wantDefault: defaultIndexPath},
+		{name: "export-architecture", cmd: newExportArchitectureCmd(), wantDefault: defaultIndexPath},
 	}
 
 	for _, tt := range tests {
@@ -56,10 +60,122 @@ func TestRemovedCommandsAreNotRegistered(t *testing.T) {
 	}
 }
 
+func TestExportArchitectureCommandIsRegistered(t *testing.T) {
+	for _, cmd := range rootCmd.Commands() {
+		if cmd.Name() == "export-architecture" {
+			return
+		}
+	}
+	t.Fatal("expected export-architecture command to be registered")
+}
+
+func TestExportArchitectureWritesStdout(t *testing.T) {
+	root := t.TempDir()
+	indexPath := filepath.Join(root, "stacklit.json")
+	writeArchitectureIndexFixture(t, indexPath)
+
+	var stdout bytes.Buffer
+	err := runExportArchitecture(&exportArchitectureOptions{input: indexPath}, &stdout, time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("export-architecture returned error: %v", err)
+	}
+
+	var export archexport.Export
+	if err := json.Unmarshal(stdout.Bytes(), &export); err != nil {
+		t.Fatalf("parsing architecture export: %v", err)
+	}
+	if export.SchemaVersion != archexport.SchemaVersion {
+		t.Fatalf("expected schema version %q, got %q", archexport.SchemaVersion, export.SchemaVersion)
+	}
+	if export.GeneratedAt != "2026-06-07T12:00:00Z" {
+		t.Fatalf("unexpected generated_at: %s", export.GeneratedAt)
+	}
+	if len(export.Membership) != 1 || export.Membership[0].Path != "main.go" {
+		t.Fatalf("expected root membership to use repo-relative path, got %+v", export.Membership)
+	}
+}
+
+func TestExportArchitectureWritesOutputFile(t *testing.T) {
+	root := t.TempDir()
+	indexPath := filepath.Join(root, "stacklit.json")
+	outputPath := filepath.Join(root, "architecture.json")
+	writeArchitectureIndexFixture(t, indexPath)
+
+	err := runExportArchitecture(
+		&exportArchitectureOptions{input: indexPath, output: outputPath},
+		&bytes.Buffer{},
+		time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("export-architecture returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("expected output file: %v", err)
+	}
+	if !bytes.HasSuffix(data, []byte("\n")) {
+		t.Fatal("expected output JSON to end with newline")
+	}
+}
+
+func TestExportArchitectureInvalidInputDoesNotTouchOutput(t *testing.T) {
+	root := t.TempDir()
+	indexPath := filepath.Join(root, "stacklit.json")
+	outputPath := filepath.Join(root, "architecture.json")
+	if err := os.WriteFile(indexPath, []byte("{"), 0644); err != nil {
+		t.Fatalf("writing invalid index: %v", err)
+	}
+	if err := os.WriteFile(outputPath, []byte("keep\n"), 0644); err != nil {
+		t.Fatalf("writing existing output: %v", err)
+	}
+
+	err := runExportArchitecture(
+		&exportArchitectureOptions{input: indexPath, output: outputPath},
+		&bytes.Buffer{},
+		time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
+	)
+	if err == nil {
+		t.Fatal("expected invalid index to fail")
+	}
+	data, readErr := os.ReadFile(outputPath)
+	if readErr != nil {
+		t.Fatalf("reading output: %v", readErr)
+	}
+	if string(data) != "keep\n" {
+		t.Fatalf("output file should be unchanged, got %q", string(data))
+	}
+}
+
 func TestDeriveDoesNotExposeInjectFlag(t *testing.T) {
 	cmd := newDeriveCmd()
 	if flag := cmd.Flags().Lookup("inject"); flag != nil {
 		t.Fatal("derive should not expose --inject")
+	}
+}
+
+func writeArchitectureIndexFixture(t *testing.T, path string) {
+	t.Helper()
+	data := []byte(`{
+  "project": {"name": "demo"},
+  "tech": {
+    "primary_language": "go",
+    "framework_patterns": [{"name": "go", "entry": "server.go"}]
+  },
+  "structure": {"entrypoints": ["main.go"]},
+  "modules": {
+    "root": {
+      "purpose": "Root files",
+      "file_list": ["main.go"]
+    }
+  },
+  "dependencies": {
+    "edges": [],
+    "entrypoints": ["main.go"]
+  }
+}`)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatalf("writing architecture index fixture: %v", err)
 	}
 }
 
