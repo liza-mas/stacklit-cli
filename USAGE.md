@@ -57,7 +57,7 @@ stacklit ai-summary
 stacklit generate-json
 ```
 
-`init-insights` creates `stacklit-insights.json` from the current index. `ai-summary` refreshes AI-generated module purposes, workflow hints, and the architecture summary in that insights file. The final `generate-json` rebuilds `stacklit.json` enriched with the curated insights.
+`init-insights` creates `stacklit-insights.json` from the current index. `ai-summary` improves mechanically seeded module purposes and workflow hints, then updates the architecture summary in that insights file. The final `generate-json` rebuilds `stacklit.json` enriched with the curated insights.
 
 Skip `ai-summary` if you do not want AI-generated summaries.
 
@@ -232,7 +232,7 @@ If `stacklit.json` is missing, `init-insights` runs the indexer in memory and cr
 
 ### Configure AI summaries
 
-`ai-summary` reads `stacklit.json`, sends a compact architecture snapshot to a local summary command on stdin, and expects stdout to be valid `stacklit-insights.json` content containing `purpose`, `hints`, and `architecture.ai_summary`. Non-empty generated values are merged into the output insights file.
+`ai-summary` reads `stacklit.json`, sends a compact architecture snapshot to a local summary command on stdin, and expects stdout to be valid `stacklit-insights.json` content containing `purpose`, `hints`, and `architecture.ai_summary`. Non-empty generated values are merged into the output insights file. Generated purposes and add-feature hints replace mechanically seeded values, while customized purpose entries, test commands, and architecture patterns are preserved.
 
 `derive --ai-summary` is read-only. It includes the existing `architecture.ai_summary` from `stacklit.json` and does not invoke the local summary command. If the summary is missing, refresh it with `stacklit ai-summary` and then rebuild `stacklit.json` with `stacklit generate-json`.
 

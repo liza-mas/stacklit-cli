@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/glincker/stacklit/internal/hint"
 	"github.com/glincker/stacklit/internal/jsonfile"
+	"github.com/glincker/stacklit/internal/purpose"
 	"github.com/glincker/stacklit/internal/schema"
 )
 
@@ -75,18 +77,28 @@ func Apply(idx *schema.Index, file *File) {
 	applyArchitecture(&idx.Architecture, file.Architecture)
 }
 
-func Merge(target *File, source *File) {
+func Merge(target *File, source *File, idx *schema.Index) {
 	if target == nil || source == nil {
 		return
 	}
 	ensurePurpose(target)
-	for name, purpose := range source.Purpose {
-		if purpose != "" && target.Purpose[name] == "" {
-			target.Purpose[name] = purpose
+	for name, generatedPurpose := range source.Purpose {
+		if shouldMergeGeneratedPurpose(name, target.Purpose[name], generatedPurpose) {
+			target.Purpose[name] = generatedPurpose
 		}
 	}
-	applyHints(&target.Hints, source.Hints)
-	applyArchitecture(&target.Architecture, source.Architecture)
+	mergeHints(&target.Hints, source.Hints, idx)
+	mergeArchitecture(&target.Architecture, source.Architecture)
+}
+
+func shouldMergeGeneratedPurpose(module, existing, generated string) bool {
+	if generated == "" {
+		return false
+	}
+	if existing == "" {
+		return true
+	}
+	return existing == purpose.Infer(module)
 }
 
 func SeedFromIndex(file *File, idx *schema.Index, prune bool) {
@@ -142,6 +154,30 @@ func applyHints(target *schema.Hints, source schema.Hints) {
 	target.DoNotTouch = unionStrings(target.DoNotTouch, source.DoNotTouch)
 }
 
+func mergeHints(target *schema.Hints, source schema.Hints, idx *schema.Index) {
+	if shouldMergeGeneratedAddFeature(target.AddFeature, source.AddFeature, idx) {
+		target.AddFeature = source.AddFeature
+	}
+	if target.TestCmd == "" && source.TestCmd != "" {
+		target.TestCmd = source.TestCmd
+	}
+	target.EnvVars = unionStrings(target.EnvVars, source.EnvVars)
+	target.DoNotTouch = unionStrings(target.DoNotTouch, source.DoNotTouch)
+}
+
+func shouldMergeGeneratedAddFeature(existing, generated string, idx *schema.Index) bool {
+	if generated == "" {
+		return false
+	}
+	if existing == "" {
+		return true
+	}
+	if idx == nil {
+		return false
+	}
+	return existing == hint.AddFeature(idx.Modules, idx.Structure.Entrypoints)
+}
+
 func seedHints(target *schema.Hints, source schema.Hints) {
 	if target.AddFeature == "" {
 		target.AddFeature = source.AddFeature
@@ -159,6 +195,15 @@ func seedHints(target *schema.Hints, source schema.Hints) {
 
 func applyArchitecture(target *schema.Architecture, source schema.Architecture) {
 	if source.Pattern != "" {
+		target.Pattern = source.Pattern
+	}
+	if source.Summary != "" {
+		target.Summary = source.Summary
+	}
+}
+
+func mergeArchitecture(target *schema.Architecture, source schema.Architecture) {
+	if target.Pattern == "" && source.Pattern != "" {
 		target.Pattern = source.Pattern
 	}
 	if source.Summary != "" {

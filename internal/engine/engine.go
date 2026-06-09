@@ -13,10 +13,12 @@ import (
 	"github.com/glincker/stacklit/internal/detect"
 	"github.com/glincker/stacklit/internal/git"
 	"github.com/glincker/stacklit/internal/graph"
+	"github.com/glincker/stacklit/internal/hint"
 	"github.com/glincker/stacklit/internal/insights"
 	"github.com/glincker/stacklit/internal/jsonfile"
 	"github.com/glincker/stacklit/internal/monorepo"
 	"github.com/glincker/stacklit/internal/parser"
+	"github.com/glincker/stacklit/internal/purpose"
 	"github.com/glincker/stacklit/internal/renderer"
 	"github.com/glincker/stacklit/internal/schema"
 	"github.com/glincker/stacklit/internal/walker"
@@ -42,36 +44,6 @@ type Result struct {
 	MermaidPath string
 	Index       *schema.Index
 	Duration    time.Duration
-}
-
-// purposeMap maps common directory names to human-readable descriptions.
-var purposeMap = map[string]string{
-	"auth":       "Authentication and authorization",
-	"api":        "API endpoints and handlers",
-	"db":         "Database access layer",
-	"models":     "Data models and types",
-	"config":     "Configuration management",
-	"components": "UI components",
-	"hooks":      "React hooks",
-	"cmd":        "Application entrypoints",
-	"internal":   "Private application packages",
-	"pkg":        "Public packages",
-	"lib":        "Shared library code",
-	"utils":      "Utility functions",
-	"services":   "Business logic services",
-	"middleware": "HTTP middleware",
-	"cli":        "Command-line interface",
-	"schema":     "Data schema definitions",
-	"renderer":   "Output renderers",
-	"walker":     "File system walker",
-	"graph":      "Dependency graph",
-	"engine":     "Core orchestration engine",
-	"git":        "Git integration",
-	"assets":     "Static assets",
-	"parser":     "Source code parsers",
-	"monorepo":   "Monorepo detection",
-	"detect":     "Framework and tool detection",
-	"summary":    "AI-powered codebase summaries",
 }
 
 var parseAllWithWorkers = parser.ParseAllWithWorkers
@@ -108,44 +80,6 @@ func resolveParseWorkers(cfg *config.Config, override *int) (int, error) {
 		return 0, newParseWorkerCountError("parse_workers must be at least 1")
 	}
 	return cfg.ParseWorkers, nil
-}
-
-// inferPurpose returns a human-readable description for a module path.
-func inferPurpose(name string) string {
-	// Use the last path segment for lookup.
-	base := filepath.Base(name)
-	if desc, ok := purposeMap[base]; ok {
-		return desc
-	}
-	// Fall back to the name itself, capitalised.
-	if base == "." || base == "" || base == "root" {
-		return "Root package"
-	}
-	words := strings.Fields(strings.ReplaceAll(base, "_", " "))
-	for i, w := range words {
-		if len(w) > 0 {
-			words[i] = strings.ToUpper(w[:1]) + w[1:]
-		}
-	}
-	return strings.Join(words, " ")
-}
-
-// generateAddFeatureHint returns a hint string describing where to add a new feature.
-func generateAddFeatureHint(modules map[string]schema.ModuleInfo, entrypoints []string) string {
-	for name := range modules {
-		base := filepath.Base(name)
-		if base == "api" || base == "handler" || base == "handlers" ||
-			strings.Contains(name, "/api") || strings.Contains(name, "/handler") {
-			if len(entrypoints) > 0 {
-				return fmt.Sprintf("Add handler in %s, register in %s", name, entrypoints[0])
-			}
-			return fmt.Sprintf("Add handler in %s", name)
-		}
-	}
-	if len(entrypoints) > 0 {
-		return fmt.Sprintf("Start from entrypoint %s", entrypoints[0])
-	}
-	return ""
 }
 
 func filterRetainedModules(names []string, retained map[string]bool) []string {
@@ -653,7 +587,7 @@ func assembleIndex(
 		}
 
 		modules[mod.Name] = schema.ModuleInfo{
-			Purpose:    inferPurpose(mod.Name),
+			Purpose:    purpose.Infer(mod.Name),
 			Language:   mod.PrimaryLanguage,
 			Files:      mod.FileCount,
 			Lines:      mod.LineCount,
@@ -694,7 +628,7 @@ func assembleIndex(
 	// --- Hints ---
 	testCmd := detectTestCommand(root)
 	envVars := detect.DetectEnvVars(root, contents)
-	addFeature := generateAddFeatureHint(modules, entrypoints)
+	addFeature := hint.AddFeature(modules, entrypoints)
 	doNotTouch := detectDoNotTouch(root)
 
 	// --- Workspaces ---

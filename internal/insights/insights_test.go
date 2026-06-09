@@ -100,35 +100,51 @@ func TestSeedFromIndexPreservesExistingValuesAndPrunes(t *testing.T) {
 func TestMergeAppliesGeneratedInsights(t *testing.T) {
 	target := &File{
 		Purpose: map[string]string{
-			"internal/cli":    "Old CLI purpose",
+			"internal/cli":    "Curated CLI purpose",
 			"internal/engine": "Core orchestration engine",
 		},
 		Hints: schema.Hints{
-			TestCmd: "go test ./...",
-			EnvVars: []string{"ANTHROPIC_API_KEY"},
+			AddFeature: "Add handler in internal/api, register in cmd/stacklit/main.go",
+			TestCmd:    "go test ./...",
+			EnvVars:    []string{"ANTHROPIC_API_KEY"},
 		},
-		Architecture: schema.Architecture{Summary: "Old summary"},
+		Architecture: schema.Architecture{
+			Pattern: "Curated architecture pattern",
+			Summary: "Old summary",
+		},
 	}
 	source := &File{
 		Purpose: map[string]string{
 			"internal/cli":     "CLI commands and wiring",
+			"internal/engine":  "Index generation pipeline",
 			"internal/summary": "AI insight generation",
 			"internal/empty":   "",
 		},
 		Hints: schema.Hints{
 			AddFeature: "Add commands in internal/cli",
+			TestCmd:    "make test",
 			EnvVars:    []string{"STACKLIT_SUMMARY_CMD", "ANTHROPIC_API_KEY"},
 		},
-		Architecture: schema.Architecture{Summary: "Generated architecture summary"},
+		Architecture: schema.Architecture{
+			Pattern: "Generated architecture pattern",
+			Summary: "Generated architecture summary",
+		},
+	}
+	idx := &schema.Index{
+		Structure: schema.Structure{Entrypoints: []string{"cmd/stacklit/main.go"}},
+		Modules: map[string]schema.ModuleInfo{
+			"internal/api":      {Purpose: "API endpoints and handlers"},
+			"internal/handlers": {Purpose: "Handlers"},
+		},
 	}
 
-	Merge(target, source)
+	Merge(target, source, idx)
 
-	if got := target.Purpose["internal/cli"]; got != "Old CLI purpose" {
-		t.Fatalf("expected existing purpose to be preserved, got %q", got)
+	if got := target.Purpose["internal/cli"]; got != "Curated CLI purpose" {
+		t.Fatalf("expected curated purpose to be preserved, got %q", got)
 	}
-	if got := target.Purpose["internal/engine"]; got != "Core orchestration engine" {
-		t.Fatalf("expected omitted purpose to be preserved, got %q", got)
+	if got := target.Purpose["internal/engine"]; got != "Index generation pipeline" {
+		t.Fatalf("expected mechanical purpose to be replaced, got %q", got)
 	}
 	if got := target.Purpose["internal/summary"]; got != "AI insight generation" {
 		t.Fatalf("expected missing purpose to be filled from generated value, got %q", got)
@@ -137,16 +153,19 @@ func TestMergeAppliesGeneratedInsights(t *testing.T) {
 		t.Fatal("expected empty generated purpose to be ignored")
 	}
 	if got := target.Hints.TestCmd; got != "go test ./..." {
-		t.Fatalf("expected omitted test command to be preserved, got %q", got)
+		t.Fatalf("expected existing test command to be preserved, got %q", got)
 	}
 	if got := target.Hints.AddFeature; got != "Add commands in internal/cli" {
-		t.Fatalf("expected generated add_feature hint, got %q", got)
+		t.Fatalf("expected mechanical add_feature hint to be replaced, got %q", got)
 	}
 	if len(target.Hints.EnvVars) != 2 {
 		t.Fatalf("expected env vars to be unioned, got %v", target.Hints.EnvVars)
 	}
 	if got := target.Architecture.Summary; got != "Generated architecture summary" {
 		t.Fatalf("expected generated architecture summary, got %q", got)
+	}
+	if got := target.Architecture.Pattern; got != "Curated architecture pattern" {
+		t.Fatalf("expected curated architecture pattern to be preserved, got %q", got)
 	}
 }
 

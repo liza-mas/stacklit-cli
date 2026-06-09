@@ -67,7 +67,7 @@ func newAISummaryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			insights.Merge(file, generated)
+			insights.Merge(file, generated, idx)
 			if err := insights.Write(output, file); err != nil {
 				return err
 			}
