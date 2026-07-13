@@ -21,7 +21,7 @@ const (
 	envCmd     = "STACKLIT_SUMMARY_CMD"
 	envTimeout = "STACKLIT_SUMMARY_TIMEOUT"
 
-	defaultTimeoutSec = 120
+	defaultTimeoutSec = 5 * 60
 	stderrTail        = 500
 )
 

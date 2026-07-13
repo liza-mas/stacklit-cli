@@ -17,6 +17,12 @@ func TestDefaultCommandAppendsSystemPrompt(t *testing.T) {
 	}
 }
 
+func TestDefaultSummaryTimeoutIsFiveMinutes(t *testing.T) {
+	if defaultTimeoutSec != 5*60 {
+		t.Fatalf("expected default summary timeout to be 300 seconds, got %d", defaultTimeoutSec)
+	}
+}
+
 func TestSummaryCommandAppendsPromptToCustomPrefix(t *testing.T) {
 	command := summaryCommand([]string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox"})
 
