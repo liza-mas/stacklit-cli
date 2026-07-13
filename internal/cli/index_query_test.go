@@ -409,7 +409,8 @@ func TestAISummaryWritesGeneratedInsights(t *testing.T) {
 		},
 		Structure: schema.Structure{Entrypoints: []string{"cmd/stacklit/main.go"}},
 		Modules: map[string]schema.ModuleInfo{
-			"internal/cli": {Purpose: "Old CLI purpose", Files: 1, Lines: 12},
+			"internal/cli":     {Purpose: "Old CLI purpose", Files: 1, Lines: 12},
+			"internal/summary": {Purpose: "Old summary purpose", Files: 1, Lines: 6},
 		},
 		Dependencies: schema.Dependencies{},
 		Hints:        schema.Hints{TestCmd: "go test ./..."},
@@ -423,7 +424,8 @@ func TestAISummaryWritesGeneratedInsights(t *testing.T) {
 	}
 	if err := os.WriteFile(outputPath, []byte(`{
   "purpose": {
-    "internal/cli": "Existing curated purpose"
+    "internal/cli": "Existing curated purpose",
+    "internal/removed": "Removed module"
   }
 }`), 0644); err != nil {
 		t.Fatalf("writing existing insights: %v", err)
@@ -433,7 +435,8 @@ cat <<'JSON'
 {
   "purpose": {
     "internal/cli": "Generated CLI purpose",
-    "internal/summary": "AI-generated insight production"
+    "internal/summary": "AI-generated insight production",
+    "internal/generated_removed": "Generated removed module"
   },
   "hints": {
     "add_feature": "Add commands in internal/cli",
@@ -465,6 +468,12 @@ JSON
 	}
 	if got.Purpose["internal/summary"] != "AI-generated insight production" {
 		t.Fatalf("expected generated purpose for new module, got %+v", got.Purpose)
+	}
+	if _, ok := got.Purpose["internal/removed"]; ok {
+		t.Fatalf("expected removed existing purpose to be pruned, got %+v", got.Purpose)
+	}
+	if _, ok := got.Purpose["internal/generated_removed"]; ok {
+		t.Fatalf("expected off-index generated purpose to be ignored, got %+v", got.Purpose)
 	}
 	if got.Hints.AddFeature != "Add commands in internal/cli" {
 		t.Fatalf("expected generated add_feature hint, got %+v", got.Hints)

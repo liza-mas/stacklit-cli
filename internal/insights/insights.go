@@ -82,7 +82,11 @@ func Merge(target *File, source *File, idx *schema.Index) {
 		return
 	}
 	ensurePurpose(target)
+	prunePurpose(target.Purpose, idx)
 	for name, generatedPurpose := range source.Purpose {
+		if !purposeMatchesIndex(name, idx) {
+			continue
+		}
 		if shouldMergeGeneratedPurpose(name, target.Purpose[name], generatedPurpose) {
 			target.Purpose[name] = generatedPurpose
 		}
@@ -108,11 +112,7 @@ func SeedFromIndex(file *File, idx *schema.Index, prune bool) {
 	}
 
 	if prune {
-		for name := range file.Purpose {
-			if _, ok := idx.Modules[name]; !ok {
-				delete(file.Purpose, name)
-			}
-		}
+		prunePurpose(file.Purpose, idx)
 	}
 
 	for name, mod := range idx.Modules {
@@ -128,6 +128,32 @@ func ensurePurpose(file *File) {
 	if file.Purpose == nil {
 		file.Purpose = map[string]string{}
 	}
+}
+
+func prunePurpose(purposes map[string]string, idx *schema.Index) {
+	if idx == nil {
+		return
+	}
+	for name := range purposes {
+		if !purposeMatchesIndex(name, idx) {
+			delete(purposes, name)
+		}
+	}
+}
+
+func purposeMatchesIndex(name string, idx *schema.Index) bool {
+	if idx == nil {
+		return true
+	}
+	if _, ok := idx.Modules[name]; ok {
+		return true
+	}
+	for module := range idx.Modules {
+		if filepath.Base(module) == name {
+			return true
+		}
+	}
+	return false
 }
 
 func purposeFor(file *File, module string) string {

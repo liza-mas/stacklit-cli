@@ -59,6 +59,7 @@ func TestSeedFromIndexPreservesExistingValuesAndPrunes(t *testing.T) {
 	file := &File{
 		Purpose: map[string]string{
 			"internal/cli":     "Curated CLI purpose",
+			"engine":           "Curated engine basename purpose",
 			"internal/removed": "Removed module",
 		},
 		Hints: schema.Hints{TestCmd: "make test"},
@@ -83,6 +84,9 @@ func TestSeedFromIndexPreservesExistingValuesAndPrunes(t *testing.T) {
 	if got := file.Purpose["internal/engine"]; got != "Core orchestration engine" {
 		t.Fatalf("expected new purpose to be seeded, got %q", got)
 	}
+	if got := file.Purpose["engine"]; got != "Curated engine basename purpose" {
+		t.Fatalf("expected basename purpose to be preserved, got %q", got)
+	}
 	if _, ok := file.Purpose["internal/removed"]; ok {
 		t.Fatal("expected removed module to be pruned")
 	}
@@ -100,8 +104,10 @@ func TestSeedFromIndexPreservesExistingValuesAndPrunes(t *testing.T) {
 func TestMergeAppliesGeneratedInsights(t *testing.T) {
 	target := &File{
 		Purpose: map[string]string{
-			"internal/cli":    "Curated CLI purpose",
-			"internal/engine": "Core orchestration engine",
+			"internal/cli":     "Curated CLI purpose",
+			"internal/engine":  "Core orchestration engine",
+			"handlers":         "Curated handler basename purpose",
+			"internal/removed": "Removed module",
 		},
 		Hints: schema.Hints{
 			AddFeature: "Add handler in internal/api, register in cmd/stacklit/main.go",
@@ -118,6 +124,7 @@ func TestMergeAppliesGeneratedInsights(t *testing.T) {
 			"internal/cli":     "CLI commands and wiring",
 			"internal/engine":  "Index generation pipeline",
 			"internal/summary": "AI insight generation",
+			"internal/removed": "Generated removed module",
 			"internal/empty":   "",
 		},
 		Hints: schema.Hints{
@@ -133,6 +140,9 @@ func TestMergeAppliesGeneratedInsights(t *testing.T) {
 	idx := &schema.Index{
 		Structure: schema.Structure{Entrypoints: []string{"cmd/stacklit/main.go"}},
 		Modules: map[string]schema.ModuleInfo{
+			"internal/cli":      {Purpose: "Command-line interface"},
+			"internal/engine":   {Purpose: "Core orchestration engine"},
+			"internal/summary":  {Purpose: "AI-powered codebase summaries"},
 			"internal/api":      {Purpose: "API endpoints and handlers"},
 			"internal/handlers": {Purpose: "Handlers"},
 		},
@@ -148,6 +158,12 @@ func TestMergeAppliesGeneratedInsights(t *testing.T) {
 	}
 	if got := target.Purpose["internal/summary"]; got != "AI insight generation" {
 		t.Fatalf("expected missing purpose to be filled from generated value, got %q", got)
+	}
+	if got := target.Purpose["handlers"]; got != "Curated handler basename purpose" {
+		t.Fatalf("expected basename purpose to be preserved, got %q", got)
+	}
+	if _, ok := target.Purpose["internal/removed"]; ok {
+		t.Fatal("expected removed purpose to be pruned")
 	}
 	if _, ok := target.Purpose["internal/empty"]; ok {
 		t.Fatal("expected empty generated purpose to be ignored")
