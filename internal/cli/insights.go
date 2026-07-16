@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/glincker/stacklit/internal/engine"
 	"github.com/glincker/stacklit/internal/insights"
@@ -63,7 +64,7 @@ func newAISummaryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			generated, err := summary.Run(idx)
+			generated, err := summary.Run(idx, file, filepath.Dir(input))
 			if err != nil {
 				return err
 			}
