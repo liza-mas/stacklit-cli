@@ -40,6 +40,18 @@ func TestSummaryCommandAppendsPromptToCustomPrefix(t *testing.T) {
 	}
 }
 
+func TestCodexExecInvocationUsesStdinForPromptAndInput(t *testing.T) {
+	prefix := []string{"/usr/local/bin/codex", "exec", "--dangerously-bypass-approvals-and-sandbox"}
+	command, input := summaryInvocation(prefix, "Prompt instructions", `{"project":"stacklit"}`)
+
+	if !slices.Equal(command, prefix) {
+		t.Fatalf("expected codex command without prompt argument, got %v", command)
+	}
+	if !strings.Contains(input, "Prompt instructions") || !strings.Contains(input, `{"project":"stacklit"}`) {
+		t.Fatalf("expected prompt and JSON on stdin, got %q", input)
+	}
+}
+
 func TestSummaryWordTargetUsesIndexComplexityWithinBounds(t *testing.T) {
 	small := &schema.Index{Modules: map[string]schema.ModuleInfo{"cmd": {}}}
 	large := &schema.Index{

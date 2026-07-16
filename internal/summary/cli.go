@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -37,7 +38,6 @@ func Run(idx *schema.Index, existing *insights.File, root string) (*insights.Fil
 		commandPrefix = parts
 	}
 	purposes := existingPurposeContext(existing)
-	command := summaryCommand(commandPrefix, freshPrompt(idx, docs, purposes))
 
 	n, _ := strconv.Atoi(strings.TrimSpace(os.Getenv(envTimeout)))
 	timeout := time.Duration(cmp.Or(max(n, 0), defaultTimeoutSec)) * time.Second
@@ -47,7 +47,8 @@ func Run(idx *schema.Index, existing *insights.File, root string) (*insights.Fil
 		return nil, fmt.Errorf("marshalling index snapshot: %w", err)
 	}
 
-	generated, err := runSummaryCommand(timeout, command, string(userJSON))
+	command, input := summaryInvocation(commandPrefix, freshPrompt(idx, docs, purposes), string(userJSON))
+	generated, err := runSummaryCommand(timeout, command, input)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +60,8 @@ func Run(idx *schema.Index, existing *insights.File, root string) (*insights.Fil
 	if err != nil {
 		return nil, fmt.Errorf("marshalling summary reconciliation: %w", err)
 	}
-	reconciled, err := runSummaryCommand(timeout, summaryCommand(commandPrefix, reconcilePrompt(idx, docs, purposes)), string(reconcileJSON))
+	reconcileCommand, reconcileInput := summaryInvocation(commandPrefix, reconcilePrompt(idx, docs, purposes), string(reconcileJSON))
+	reconciled, err := runSummaryCommand(timeout, reconcileCommand, reconcileInput)
 	if err != nil {
 		return nil, err
 	}
@@ -113,6 +115,13 @@ func summaryCommand(prefix []string, prompt string) []string {
 	command = append(command, prefix...)
 	command = append(command, prompt)
 	return command
+}
+
+func summaryInvocation(prefix []string, prompt, input string) ([]string, string) {
+	if len(prefix) >= 2 && filepath.Base(prefix[0]) == "codex" && prefix[1] == "exec" {
+		return prefix, prompt + "\n\n--- Stacklit input JSON ---\n" + input
+	}
+	return summaryCommand(prefix, prompt), input
 }
 
 func parseInsightsOutput(text string) (*insights.File, error) {
