@@ -2,6 +2,7 @@
   "purpose": {
     "assets": "Embedded HTML template and language icon assets used by renderers to produce the browser-facing output.",
     "cmd/stacklit": "Thin CLI executable entrypoint that delegates command handling to internal/cli.",
+    "internal/archexport": "Transforms a Stacklit index into the architecture-export interchange document.",
     "internal/cli": "Cobra-style command layer for stacklit workflows including indexing, rendering, diffs, insights, derive output, and exit-code mapping.",
     "internal/config": "Project configuration loader and defaults for ignore rules, scan limits, and output paths.",
     "internal/derive": "Utilities that turn a schema index into compact injectable summaries and update target files with generated blocks.",
@@ -9,10 +10,12 @@
     "internal/engine": "Central orchestration layer that scans repositories, parses files, builds graphs, applies insights, and writes outputs.",
     "internal/git": "Git-derived activity and content identity helpers, including recent/hot file analysis and Merkle hashing.",
     "internal/graph": "Module dependency graph builder that groups parsed files, computes edges, entrypoints, isolated modules, and dependency rankings.",
+    "internal/hint": "Derives actionable feature-placement guidance from indexed modules and entrypoints.",
     "internal/insights": "Load, merge, seed, apply, and write stacklit-insights.json purpose, hint, and architecture overlays.",
     "internal/jsonfile": "Shared JSON marshal and indented write helpers for stable formatted output files.",
     "internal/monorepo": "Repository workspace detector for monorepo tools and workspace layouts.",
     "internal/parser": "Language-aware source parsers that extract imports, exports, type definitions, line counts, and entrypoint flags.",
+    "internal/purpose": "Supplies mechanical fallback module-purpose text when curated insight is unavailable.",
     "internal/renderer": "JSON, Markdown, Mermaid, and HTML output generation from the canonical schema index.",
     "internal/schema": "Canonical data model for project indexes, module metadata, dependencies, git activity, hints, and multi-repo summaries.",
     "internal/summary": "AI-assisted summary command integration that generates insights files from schema indexes.",
@@ -23,10 +26,15 @@
     "add_feature": "For new CLI-visible behavior, start in internal/cli, delegate orchestration to internal/engine, add schema fields in internal/schema only when the output contract changes, and update renderer/insights handling for any new index data.",
     "test_command": "go test ./...",
     "env_vars": [
-      "ANTHROPIC_API_KEY"
+      "ANTHROPIC_API_KEY",
+      "STACKLIT_SUMMARY_CMD",
+      "STACKLIT_SUMMARY_TIMEOUT",
+      "BRANCH",
+      "INSTALL_DIR",
+      "STACKLIT_SOURCE_REPO"
     ]
   },
   "architecture": {
-    "ai_summary": "Stacklit is a Go CLI organized around a thin cmd/stacklit entrypoint and a command layer in internal/cli. The internal/engine package is the main coordinator: it loads config, walks files, parses source, detects frameworks and monorepos, builds dependency graphs, applies optional insights, and dispatches output writers. internal/schema is the shared contract used across almost every subsystem, so changes to index shape should be treated as cross-cutting.\n\nData flows from filesystem discovery in internal/walker into internal/parser, then through internal/graph and internal/detect to populate schema.Index. Git metadata from internal/git enriches the index with activity and stable identity, while internal/insights overlays human or AI-maintained purpose, hints, and architecture summaries. Renderers consume the final schema to emit JSON, Markdown, Mermaid, and HTML, with embedded assets supplying template and icon resources.\n\nThe codebase favors small internal packages around one stage of the indexing pipeline, with tests colocated beside most core packages. Additions should preserve that pipeline shape: parsing and detection stay low-level, graph/schema remain canonical, engine composes workflows, CLI handles user intent and exit behavior, and renderer packages should only format already-derived data."
+    "ai_summary": "Stacklit is a local Go CLI that produces a compact, committable repository index for AI-assisted navigation. Its central product is `stacklit.json`, a durable structural description of a codebase’s technology, modules, relationships, activity, entrypoints, and workflow hints. The executable remains intentionally thin: the command layer owns the user-facing CLI contract, command selection, and exit behavior, while internal packages perform analysis and output work.\n\nA scan starts by loading project configuration and walking eligible files. Language-aware parsing converts files into normalized metadata, which the engine combines with dependency-graph construction, framework and environment detection, monorepo discovery, and Git-derived activity before assembling the canonical index. Optional insights are applied as a late semantic overlay, keeping generated facts distinct from maintained purpose, hints, and architecture interpretation. The completed index can then be rendered in several representations or condensed into an injectable navigation map; output code formats already-derived data rather than repeating analysis.\n\nThe architecture is deliberately pipeline-oriented. Filesystem traversal and parsing are low-level input concerns; graphing, detection, Git analysis, and hints each derive one kind of metadata; the schema is the shared persistent contract; and the engine is the cross-stage coordinator. AI-summary generation and insight persistence are separate from core indexing so they remain optional and can be reconciled against the current index. Architecture export is likewise an adapter from the canonical index to another document format, without making that external format part of core index construction.\n\nCompatibility and determinism are load-bearing constraints. Parsing can retain non-fatal per-file errors while allowing the broader scan to continue, and parser-worker concurrency is bounded, with one worker preserving the compatibility default. Configuration is validated before expensive scan work, while CLI flags provide command-local overrides. New behavior should be added at the stage that owns it: expose user-visible controls through the CLI, compose multi-stage workflows in the engine, keep parsing and detection independent, and change the schema—and every affected consumer—only when the persistent index contract must change."
   }
 }
