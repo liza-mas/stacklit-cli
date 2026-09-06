@@ -1,6 +1,7 @@
 package summary
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,17 +9,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/glincker/stacklit/internal/insights"
 	"github.com/glincker/stacklit/internal/schema"
 )
 
 func TestDefaultCommandAppendsSystemPrompt(t *testing.T) {
-	command := summaryCommand(defaultCommandPrefix(), freshPrompt(&schema.Index{}, "", ""))
+	command := summaryCommand(defaultCommandPrefix(), freshPrompt(&schema.Index{}, "", true))
 
 	if !slices.Equal(command[:3], []string{"claude", "-p", "--system-prompt"}) {
 		t.Fatalf("expected claude print mode with system prompt flag, got %v", command)
 	}
-	if command[3] != freshPrompt(&schema.Index{}, "", "") {
+	if command[3] != freshPrompt(&schema.Index{}, "", true) {
 		t.Fatal("expected default command to pass summary instructions as system prompt")
 	}
 }
@@ -30,12 +30,12 @@ func TestDefaultSummaryTimeoutIsFiveMinutes(t *testing.T) {
 }
 
 func TestSummaryCommandAppendsPromptToCustomPrefix(t *testing.T) {
-	command := summaryCommand([]string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox"}, freshPrompt(&schema.Index{}, "", ""))
+	command := summaryCommand([]string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox"}, freshPrompt(&schema.Index{}, "", true))
 
 	if !slices.Equal(command[:3], []string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox"}) {
 		t.Fatalf("expected custom command prefix to be preserved, got %v", command)
 	}
-	if command[3] != freshPrompt(&schema.Index{}, "", "") {
+	if command[3] != freshPrompt(&schema.Index{}, "", true) {
 		t.Fatal("expected summary instructions to be appended after custom command prefix")
 	}
 }
@@ -73,81 +73,188 @@ func TestSummaryWordTargetUsesIndexComplexityWithinBounds(t *testing.T) {
 	}
 }
 
-func TestReconcileRequestIncludesBothSummariesAndCurrentIndex(t *testing.T) {
-	idx := &schema.Index{Modules: map[string]schema.ModuleInfo{"internal/summary": {}}}
-
-	request := newReconcileRequest(idx, "Existing summary", "Fresh summary")
-
-	if request.ExistingSummary != "Existing summary" || request.FreshSummary != "Fresh summary" {
-		t.Fatalf("expected both summaries in reconciliation request, got %+v", request)
+func TestSnapshotForExcludesInsightsWithoutMutatingIndex(t *testing.T) {
+	idx := &schema.Index{
+		Project:      schema.Project{Name: "project"},
+		Modules:      map[string]schema.ModuleInfo{"core": {Purpose: "OLD_PURPOSE", Files: 2, Exports: []string{"Run"}}},
+		Hints:        schema.Hints{AddFeature: "OLD_HINT", TestCmd: "OLD_TEST_COMMAND"},
+		Architecture: schema.Architecture{Summary: "OLD_SUMMARY"},
 	}
-	if _, ok := request.Index.Modules["internal/summary"]; !ok {
-		t.Fatalf("expected current index in reconciliation request, got %+v", request.Index)
+	before, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if request.TargetWordCount != minSummaryWords {
-		t.Fatalf("expected target %d, got %d", minSummaryWords, request.TargetWordCount)
+	snapshot := snapshotFor(idx)
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, unwanted := range []string{"OLD_PURPOSE", "OLD_HINT", "OLD_TEST_COMMAND", "OLD_SUMMARY", `"hints"`, `"architecture"`} {
+		if strings.Contains(string(payload), unwanted) {
+			t.Fatalf("initial snapshot exposes previous insights: %s", payload)
+		}
+	}
+	if snapshot.Project.Name != "project" || snapshot.Modules["core"].Files != 2 || !slices.Equal(snapshot.Modules["core"].Exports, []string{"Run"}) {
+		t.Fatalf("snapshot lost structural evidence: %+v", snapshot)
+	}
+	after, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("snapshot sanitization mutated the index used for merging")
 	}
 }
 
-func TestReconcilePromptIncludesResolvedWordBudget(t *testing.T) {
-	idx := &schema.Index{Modules: map[string]schema.ModuleInfo{"internal/summary": {}}}
-
-	prompt := reconcilePrompt(idx, "", "")
-	if !strings.Contains(prompt, fmt.Sprintf("%d words", summaryWordTarget(idx))) {
-		t.Fatalf("expected resolved word budget in reconciliation prompt, got %q", prompt)
+func TestSessionPromptOrdersDraftReadAndReconciliation(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "custom insights.json")
+	prompt := sessionPrompt(&schema.Index{}, "", root, path)
+	previous := -1
+	for _, step := range []string{"1. Draft fresh", "2. Only after drafting", "3. Reconcile", "4. Return only the final insights JSON"} {
+		position := strings.Index(prompt, step)
+		if position <= previous {
+			t.Fatalf("workflow must order drafting, deferred reading, reconciliation, and final output: missing or misplaced %q", step)
+		}
+		previous = position
 	}
-	if !strings.Contains(prompt, "return the existing summary unchanged") {
-		t.Fatalf("expected reconciliation fallback in prompt, got %q", prompt)
+	if !strings.Contains(prompt, fmt.Sprintf("%q", path)) || !strings.Contains(prompt, fmt.Sprintf("%q", root)) {
+		t.Fatal("workflow must identify the actual repository and previous insights file")
+	}
+	if !strings.Contains(prompt, "If it is absent, keep the fresh draft") || !strings.Contains(prompt, "Do not emit intermediate drafts or edit repository files") {
+		t.Fatal("workflow must handle absent insights and leave persistence to Stacklit")
 	}
 }
 
-func TestSummaryPromptsRequestFirstContactOrientation(t *testing.T) {
+func TestSummaryPromptsRequestSupportedDynamicsWithoutStructuralRepetition(t *testing.T) {
 	for name, prompt := range map[string]string{
-		"fresh":     freshPrompt(&schema.Index{}, "", ""),
-		"reconcile": reconcilePrompt(&schema.Index{}, "", ""),
+		"fresh":             freshPrompt(&schema.Index{}, "", true),
+		"session":           sessionPrompt(&schema.Index{}, "", "/repo", "/repo/insights.json"),
+		"fresh with docs":   freshPrompt(&schema.Index{}, "\n--- design-notes.md ---\nReference evidence.", true),
+		"session with docs": sessionPrompt(&schema.Index{}, "\n--- design-notes.md ---\nReference evidence.", "/repo", "/repo/insights.json"),
 	} {
 		t.Run(name, func(t *testing.T) {
-			for _, expected := range []string{"first-time reader", "end-to-end flow", "responsibility boundaries", "invariants or constraints", "where new behavior belongs"} {
+			for _, expected := range []string{
+				"\nSCOPE:\n", "\nCONTENT:\n", "\nEVIDENCE RULES:\n", "\nSTYLE:\n",
+				"2-5 concise paragraphs", "first-time reader",
+				"Ground behavioral claims in available evidence",
+				"Within architecture.ai_summary, do not repeat module inventories or placement hints",
+				"Connect responsibilities where needed",
+				"Establish the main end-to-end flow before specialized details",
+				"State project-level constraints that bound acceptable implementations",
+				"and stacklit derive as the reader's next step",
+				fmt.Sprintf("Use a soft word budget of %d words (+/-10%%)", summaryWordTarget(&schema.Index{})),
+			} {
 				if !strings.Contains(prompt, expected) {
 					t.Fatalf("expected prompt to request %q, got %q", expected, prompt)
+				}
+			}
+			for _, obsolete := range []string{"where new behavior belongs", "Focus on purpose"} {
+				if strings.Contains(prompt, obsolete) {
+					t.Fatalf("obsolete instruction %q conflicts with the summary contract", obsolete)
 				}
 			}
 		})
 	}
 }
 
-func TestRunReconcilesExistingSummary(t *testing.T) {
-	script := filepath.Join(t.TempDir(), "summary")
-	if err := os.WriteFile(script, []byte(`#!/bin/sh
-case "$*" in
-  *"reconciling an existing"*) echo '{"architecture":{"ai_summary":"Reconciled summary."}}' ;;
-  *)
-    input="$(cat)"
-    case "$input" in *"target_word_count"*) exit 1 ;; esac
-    echo '{"purpose":{"internal/summary":"AI summary generation"},"architecture":{"ai_summary":"Fresh summary."}}'
-    ;;
-esac
-`), 0755); err != nil {
-		t.Fatalf("writing summary command: %v", err)
-	}
-	t.Setenv(envCmd, script)
-
-	got, err := Run(&schema.Index{Modules: map[string]schema.ModuleInfo{"internal/summary": {}}}, &insights.File{Architecture: schema.Architecture{Summary: "Existing summary."}}, t.TempDir())
-	if err != nil {
-		t.Fatalf("Run returned error: %v", err)
-	}
-	if got.Architecture.Summary != "Reconciled summary." {
-		t.Fatalf("expected reconciled summary, got %q", got.Architecture.Summary)
+func TestSummaryPromptInspectionAndDocumentation(t *testing.T) {
+	const docs = "\n--- docs/decisions/README.md ---\nDecision index evidence."
+	for _, canInspect := range []bool{false, true} {
+		for _, suppliedDocs := range []string{"", docs} {
+			t.Run(fmt.Sprintf("inspect=%t/docs=%t", canInspect, suppliedDocs != ""), func(t *testing.T) {
+				prompt := freshPrompt(&schema.Index{}, suppliedDocs, canInspect)
+				if strings.Contains(prompt, "or verified repository inspection") != canInspect ||
+					strings.Contains(prompt, "do not request repository inspection") == canInspect {
+					t.Fatal("inspection guidance must follow invocation capability, not document presence")
+				}
+				if strings.Contains(prompt, "\nDOCUMENTATION:\n") != (suppliedDocs != "") {
+					t.Fatal("documentation instructions must follow supplied document presence")
+				}
+				if suppliedDocs != "" {
+					if !strings.HasSuffix(prompt, docs+"\n--- end documentation excerpts ---\n") {
+						t.Fatal("documentation excerpts must have an explicit closing marker")
+					}
+					if !strings.Contains(prompt, "Review and cite README.md when present") ||
+						!strings.Contains(prompt, "Link the decision index when one is identified, otherwise the ADR directory") {
+						t.Fatal("documentation routing must prefer README and a decision index")
+					}
+				}
+			})
+		}
 	}
 }
 
-func TestExistingPurposeContextIsSortedAndPromptOnly(t *testing.T) {
-	purposes := existingPurposeContext(&insights.File{Purpose: map[string]string{"b": "Second", "a": "First"}})
-	if !strings.HasPrefix(purposes, "a: First\nb: Second\n") {
-		t.Fatalf("expected sorted purpose context, got %q", purposes)
-	}
-	if prompt := freshPrompt(&schema.Index{}, "", purposes); !strings.Contains(prompt, "do not output or enumerate them") {
-		t.Fatalf("expected background-only instruction, got %q", prompt)
+func TestRunUsesOneSessionWithoutExposingPreviousInsights(t *testing.T) {
+	for _, hasExisting := range []bool{false, true} {
+		t.Run(fmt.Sprintf("existing=%t", hasExisting), func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "custom insights.json")
+			existing := []byte(`{"purpose":{"core":"OLD_PURPOSE"},"hints":{"add_feature":"OLD_HINT"},"architecture":{"ai_summary":"OLD_SUMMARY"}}`)
+			if hasExisting {
+				if err := os.WriteFile(path, existing, 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			promptPath := filepath.Join(root, "prompt.txt")
+			inputPath := filepath.Join(root, "input.json")
+			callsPath := filepath.Join(root, "calls.txt")
+			t.Setenv("SUMMARY_TEST_PROMPT", promptPath)
+			t.Setenv("SUMMARY_TEST_INPUT", inputPath)
+			t.Setenv("SUMMARY_TEST_CALLS", callsPath)
+			script := filepath.Join(root, "summary")
+			if err := os.WriteFile(script, []byte(`#!/bin/sh
+printf '%s' "$*" > "$SUMMARY_TEST_PROMPT"
+cat > "$SUMMARY_TEST_INPUT"
+printf 'call\n' >> "$SUMMARY_TEST_CALLS"
+printf '%s\n' '{"purpose":{"core":"Final purpose"},"hints":{"add_feature":"Final hint"},"architecture":{"ai_summary":"Final summary."}}'
+`), 0755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv(envCmd, script)
+			idx := &schema.Index{
+				Modules:      map[string]schema.ModuleInfo{"core": {Purpose: "OLD_PURPOSE", Files: 1}},
+				Hints:        schema.Hints{AddFeature: "OLD_HINT"},
+				Architecture: schema.Architecture{Summary: "OLD_SUMMARY"},
+			}
+			got, err := Run(idx, path, root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Purpose["core"] != "Final purpose" || got.Hints.AddFeature != "Final hint" || got.Architecture.Summary != "Final summary." {
+				t.Fatalf("expected final insights from the single session, got %+v", got)
+			}
+			calls, err := os.ReadFile(callsPath)
+			if err != nil || string(calls) != "call\n" {
+				t.Fatalf("expected exactly one invocation, got %q (%v)", calls, err)
+			}
+			prompt, err := os.ReadFile(promptPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			input, err := os.ReadFile(inputPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, old := range []string{"OLD_PURPOSE", "OLD_HINT", "OLD_SUMMARY"} {
+				if strings.Contains(string(prompt)+string(input), old) {
+					t.Fatalf("previous insights leaked into initial agent input: %s", old)
+				}
+			}
+			if !strings.Contains(string(prompt), fmt.Sprintf("%q", path)) ||
+				!strings.Contains(string(prompt), "1. Draft fresh") ||
+				!strings.Contains(string(prompt), "or verified repository inspection") {
+				t.Fatal("single-session invocation omitted the deferred-read path, draft phase, or source access")
+			}
+			stored, err := os.ReadFile(path)
+			if hasExisting {
+				if err != nil || string(stored) != string(existing) {
+					t.Fatal("Run modified the existing insights file before the caller's merge")
+				}
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("Run created the output file before the caller's merge: %v", err)
+			}
+		})
 	}
 }
 

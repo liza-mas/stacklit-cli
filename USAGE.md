@@ -232,7 +232,11 @@ If `stacklit.json` is missing, `init-insights` runs the indexer in memory and cr
 
 ### Configure AI summaries
 
-`ai-summary` reads `stacklit.json`, sends a compact architecture snapshot to a local summary command on stdin, and expects stdout to be valid `stacklit-insights.json` content containing `purpose`, `hints`, and `architecture.ai_summary`. Non-empty generated values are merged into the output insights file. Generated purposes and add-feature hints replace mechanically seeded values, while customized purpose entries, test commands, and architecture patterns are preserved.
+`ai-summary` reads `stacklit.json` and invokes the configured local agent once. The initial JSON snapshot excludes previous module-purpose text, hints, and architecture summaries. The prompt requires the agent to draft fresh insights first, then read the existing insights file at the configured output path and reconcile in the same session. If the file is absent, it returns the fresh draft. Only the final `stacklit-insights.json` content containing `purpose`, `hints`, and `architecture.ai_summary` is emitted on stdout. The read order is prompt-directed rather than enforced by filesystem isolation. Stacklit merges and writes the result: generated purposes and add-feature hints replace mechanically seeded values, while customized purpose entries, test commands, and architecture patterns are preserved.
+
+The summary complements the module purposes and placement hints with a dynamic architectural model: component cooperation, end-to-end flow, boundary rationale, key invariants, and cross-cutting consequences of changes. It uses 2–5 concise paragraphs and an adaptive soft word budget (+/-10%). Good reference documentation is cited instead of repeating its project introduction; missing, weak, or scattered documentation calls for concise orientation or synthesis. Claims must be supported by available evidence, with documented requirements distinguished from observed guarantees. Reconciliation applies the same requirements to existing summaries. Using supplied documentation or verified repository inspection, it points readers to useful files or locations, including README, invariants, guardrails, repository structure, operational guidance, and known issues, open problems, or limitations. It prefers a decision index when identified, otherwise the ADR directory, reserving individual citations for decisions that materially explain a claim. CLI prompts permit source and documentation inspection even when no documentation excerpts were found. The direct API prompt cannot inspect the repository and uses only supplied evidence. The grouped prompt asks the summary to connect readers to the structural fields, distinguish local changes from coordinated edits, and gloss domain-specific terms on first use.
+
+The summary prioritizes the main end-to-end flow over specialized details and connects responsibilities to explain runtime cooperation and coordinated changes without repeating module inventories or placement hints. It states project-level constraints on acceptable implementations, such as stack or platform assumptions, compatibility, licensing, and branding, with references to where they are binding.
 
 `derive --ai-summary` is read-only. It includes the existing `architecture.ai_summary` from `stacklit.json` and does not invoke the local summary command. If the summary is missing, refresh it with `stacklit ai-summary` and then rebuild `stacklit.json` with `stacklit generate-json`.
 
@@ -249,11 +253,11 @@ STACKLIT_SUMMARY_CMD="claude -p --system-prompt" stacklit ai-summary
 STACKLIT_SUMMARY_CMD="codex exec --dangerously-bypass-approvals-and-sandbox" stacklit ai-summary
 ```
 
-For the default Claude command, insight-generation instructions are passed with `--system-prompt` and stdin contains only the compact JSON snapshot. Custom `STACKLIT_SUMMARY_CMD` prefixes receive the generated prompt as their final argument and must write the insights JSON object to stdout.
+For the default Claude command, insight-generation instructions are passed with `--system-prompt` and stdin contains only the compact JSON snapshot. Custom `STACKLIT_SUMMARY_CMD` prefixes receive the generated prompt as their final argument and must write the insights JSON object to stdout. The agent must support file reads to inspect repository evidence and perform the deferred reconciliation step.
 
 `STACKLIT_SUMMARY_CMD` is split on whitespace. Shell-style quoted arguments are not preserved, so prefer simple command lines or a small wrapper script for complex invocations.
 
-The timeout defaults to 120 seconds. Override it with `STACKLIT_SUMMARY_TIMEOUT`:
+The timeout defaults to 300 seconds for the entire single invocation, including drafting and reconciliation. Override it with `STACKLIT_SUMMARY_TIMEOUT`:
 
 ```bash
 STACKLIT_SUMMARY_TIMEOUT=300 stacklit ai-summary

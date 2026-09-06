@@ -26,9 +26,17 @@ const (
 	stderrTail        = 500
 )
 
-// Run invokes the configured agent CLI. When a prior AI summary exists, a second
-// invocation reconciles it with the fresh summary against the current index.
-func Run(idx *schema.Index, existing *insights.File, root string) (*insights.File, error) {
+// Run invokes one agent session to draft fresh insights, then read and reconcile
+// the file at insightsPath. The caller retains ownership of merging and writing.
+func Run(idx *schema.Index, insightsPath, root string) (*insights.File, error) {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, fmt.Errorf("resolving repository root: %w", err)
+	}
+	insightsPath, err = filepath.Abs(insightsPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolving insights path: %w", err)
+	}
 	docs, err := documentationDigest(root)
 	if err != nil {
 		return nil, fmt.Errorf("collecting documentation: %w", err)
@@ -37,7 +45,6 @@ func Run(idx *schema.Index, existing *insights.File, root string) (*insights.Fil
 	if parts := strings.Fields(os.Getenv(envCmd)); len(parts) > 0 {
 		commandPrefix = parts
 	}
-	purposes := existingPurposeContext(existing)
 
 	n, _ := strconv.Atoi(strings.TrimSpace(os.Getenv(envTimeout)))
 	timeout := time.Duration(cmp.Or(max(n, 0), defaultTimeoutSec)) * time.Second
@@ -47,29 +54,8 @@ func Run(idx *schema.Index, existing *insights.File, root string) (*insights.Fil
 		return nil, fmt.Errorf("marshalling index snapshot: %w", err)
 	}
 
-	command, input := summaryInvocation(commandPrefix, freshPrompt(idx, docs, purposes), string(userJSON))
-	generated, err := runSummaryCommand(timeout, command, input)
-	if err != nil {
-		return nil, err
-	}
-	if existing == nil || existing.Architecture.Summary == "" || generated.Architecture.Summary == "" {
-		return generated, nil
-	}
-
-	reconcileJSON, err := json.Marshal(newReconcileRequest(idx, existing.Architecture.Summary, generated.Architecture.Summary))
-	if err != nil {
-		return nil, fmt.Errorf("marshalling summary reconciliation: %w", err)
-	}
-	reconcileCommand, reconcileInput := summaryInvocation(commandPrefix, reconcilePrompt(idx, docs, purposes), string(reconcileJSON))
-	reconciled, err := runSummaryCommand(timeout, reconcileCommand, reconcileInput)
-	if err != nil {
-		return nil, err
-	}
-	if reconciled.Architecture.Summary == "" {
-		return nil, fmt.Errorf("summary CLI %q produced no reconciled architecture.ai_summary", command[0])
-	}
-	generated.Architecture.Summary = reconciled.Architecture.Summary
-	return generated, nil
+	command, input := summaryInvocation(commandPrefix, sessionPrompt(idx, docs, root, insightsPath), string(userJSON))
+	return runSummaryCommand(timeout, command, input)
 }
 
 func runSummaryCommand(timeout time.Duration, command []string, userJSON string) (*insights.File, error) {

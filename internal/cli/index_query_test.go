@@ -396,7 +396,7 @@ func TestGenerateJSONProceedsWithoutDefaultInsights(t *testing.T) {
 func TestAISummaryWritesGeneratedInsights(t *testing.T) {
 	root := t.TempDir()
 	indexPath := filepath.Join(root, "stacklit.json")
-	outputPath := filepath.Join(root, "stacklit-insights.json")
+	outputPath := filepath.Join(root, "custom insights.json")
 	summaryPath := filepath.Join(root, "summary")
 
 	idx := schema.Index{
@@ -431,6 +431,7 @@ func TestAISummaryWritesGeneratedInsights(t *testing.T) {
 		t.Fatalf("writing existing insights: %v", err)
 	}
 	if err := os.WriteFile(summaryPath, []byte(`#!/bin/sh
+case "$*" in *"$SUMMARY_EXPECTED_INSIGHTS"*) ;; *) exit 1 ;; esac
 cat <<'JSON'
 {
   "purpose": {
@@ -453,6 +454,7 @@ JSON
 	}
 
 	t.Setenv("STACKLIT_SUMMARY_CMD", summaryPath)
+	t.Setenv("SUMMARY_EXPECTED_INSIGHTS", outputPath)
 	cmd := newAISummaryCmd()
 	cmd.SetArgs([]string{"-i", indexPath, "-o", outputPath})
 	if err := cmd.Execute(); err != nil {

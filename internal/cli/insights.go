@@ -64,7 +64,7 @@ func newAISummaryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			generated, err := summary.Run(idx, file, filepath.Dir(input))
+			generated, err := summary.Run(idx, output, filepath.Dir(input))
 			if err != nil {
 				return err
 			}
