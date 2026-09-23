@@ -61,6 +61,7 @@ Applies to: `stacklit generate-json` and the shared engine/parser path used to p
 ### Open Questions
 
 - **OQ-000-1**: What default worker count should ship? — *Impact if unresolved*: an aggressive default could reduce latency but cause memory spikes on large repositories.
+  - *Resolved (2026-09-23)*: default is `3`. Shipped at `1` initially. After upgrading gotreesitter to v0.53.0, measured with `/usr/bin/time -f '%e %U %M' stacklit generate-json -o <tmp>.json --parse-workers N` on a private ~2,200-file Python/TypeScript/Go repository, runs interleaved across worker counts on an 8-core host under background load (load average 2.5–9). Medians over 8 runs: 8.2 s / 7.0 s / 6.3 s at 2 / 3 / 4 workers, average maximum RSS 298 / 366 / 508 MB. A second 5-run series: 8.3 s / 7.7 s / 7.6 s at 3 / 4 / 8 workers, 386 / 520 / 935 MB. One worker: 10.2 s, 290 MB (single run). Output was identical across worker counts. Wall-time differences above 2 workers are within run-to-run noise while RSS grows steadily.
 - **OQ-000-2**: Should worker count be exposed as CLI flag, `.stacklitrc.json` key, environment variable, or internal default only? — *Impact if unresolved*: users may not have a stable way to tune performance for machine size.
 
 ---

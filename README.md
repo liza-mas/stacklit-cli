@@ -174,7 +174,7 @@ stacklit diff              # check if the index is stale
 
 `generate-json` automatically enriches the index from `stacklit-insights.json` when it exists. Use `--insights <file>` to read a different insights file; if that file is missing, Stacklit warns and continues without insights.
 
-Parser concurrency defaults to `1` worker. Set `.stacklitrc.json` `parse_workers` for durable project configuration or pass `generate-json --parse-workers N` for a command-local override. A worker count of `1` disables parallel parsing for sequential compatibility, values below `1` are invalid, and higher counts may reduce wall time while increasing maximum RSS.
+Parser concurrency defaults to `3` workers. Set `.stacklitrc.json` `parse_workers` for durable project configuration or pass `generate-json --parse-workers N` for a command-local override. A worker count of `1` disables parallel parsing for sequential compatibility, values below `1` are invalid, and higher counts may reduce wall time while increasing maximum RSS.
 
 `stacklit diff` exits `0` when the index is current, `1` when sources changed, and `2` when the command cannot complete.
 
@@ -277,7 +277,7 @@ stacklit derive --ai-summary -i stacklit.json # include stored AI summary
 
 `generate-json` and `diff` honor `output.json` when no explicit output/input flag is passed. Legacy `output.mermaid` and `output.html` keys may exist in older config files, but this CLI no longer exposes the old full-generation command that wrote `DEPENDENCIES.md` and configured HTML. `view` always writes `stacklit.html`.
 
-`parse_workers` defaults to `1`. Use `1` to keep sequential compatibility mode with parallel parsing disabled, or use a higher value to parse files concurrently. `generate-json --parse-workers N` overrides the configured value for that run. Values below `1` are invalid. Higher worker counts can reduce wall time on large repositories, but more parser work may be live at once and increase maximum RSS.
+`parse_workers` defaults to `3`. Use `1` for sequential compatibility mode with parallel parsing disabled, or another value to tune concurrency. `generate-json --parse-workers N` overrides the configured value for that run. Values below `1` are invalid. Higher worker counts can reduce wall time on large repositories, but more parser work may be live at once and increase maximum RSS.
 
 `diff` uses differentiated exit codes: `0` means the index is current, `1` means sources changed, and `2` means the command failed.
 

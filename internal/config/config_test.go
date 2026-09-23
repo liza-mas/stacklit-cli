@@ -27,8 +27,8 @@ func TestLoadDefault(t *testing.T) {
 	if cfg.Output.HTML != "stacklit.html" {
 		t.Errorf("expected default output.html=stacklit.html, got %q", cfg.Output.HTML)
 	}
-	if cfg.ParseWorkers != 1 {
-		t.Errorf("expected default parse_workers=1, got %d", cfg.ParseWorkers)
+	if cfg.ParseWorkers != 3 {
+		t.Errorf("expected default parse_workers=3, got %d", cfg.ParseWorkers)
 	}
 }
 
@@ -46,8 +46,8 @@ func TestLoadCustom(t *testing.T) {
 	if cfg.MaxModules != 200 {
 		t.Errorf("expected default max_modules=200, got %d", cfg.MaxModules)
 	}
-	if cfg.ParseWorkers != 1 {
-		t.Errorf("expected omitted parse_workers to default to 1, got %d", cfg.ParseWorkers)
+	if cfg.ParseWorkers != 3 {
+		t.Errorf("expected omitted parse_workers to default to 3, got %d", cfg.ParseWorkers)
 	}
 }
 
@@ -59,21 +59,21 @@ func TestLoadValidatedParseWorkersOmitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected omitted parse_workers to load, got error: %v", err)
 	}
-	if cfg.ParseWorkers != 1 {
-		t.Fatalf("expected omitted parse_workers to default to 1, got %d", cfg.ParseWorkers)
+	if cfg.ParseWorkers != 3 {
+		t.Fatalf("expected omitted parse_workers to default to 3, got %d", cfg.ParseWorkers)
 	}
 }
 
 func TestLoadValidatedParseWorkersConfigured(t *testing.T) {
 	dir := t.TempDir()
-	writeConfig(t, dir, `{"parse_workers": 4}`)
+	writeConfig(t, dir, `{"parse_workers": 2}`)
 
 	cfg, err := LoadValidated(dir)
 	if err != nil {
 		t.Fatalf("expected configured parse_workers to load, got error: %v", err)
 	}
-	if cfg.ParseWorkers != 4 {
-		t.Fatalf("expected parse_workers=4, got %d", cfg.ParseWorkers)
+	if cfg.ParseWorkers != 2 {
+		t.Fatalf("expected parse_workers=2, got %d", cfg.ParseWorkers)
 	}
 }
 

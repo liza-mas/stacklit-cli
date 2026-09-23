@@ -29,14 +29,14 @@ func TestRunResolvesDefaultParseWorkers(t *testing.T) {
 		t.Fatalf("Run returned error: %v", err)
 	}
 
-	if !reflect.DeepEqual(*gotCounts, []int{1}) {
-		t.Fatalf("expected default parse worker count 1, got %v", *gotCounts)
+	if !reflect.DeepEqual(*gotCounts, []int{3}) {
+		t.Fatalf("expected default parse worker count 3, got %v", *gotCounts)
 	}
 }
 
 func TestRunUsesConfiguredParseWorkers(t *testing.T) {
 	root := writeEngineFixtureRepo(t)
-	if err := os.WriteFile(filepath.Join(root, ".stacklitrc.json"), []byte(`{"parse_workers":3}`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".stacklitrc.json"), []byte(`{"parse_workers":2}`), 0644); err != nil {
 		t.Fatalf("writing config: %v", err)
 	}
 	gotCounts := captureParseWorkerCounts(t)
@@ -49,8 +49,8 @@ func TestRunUsesConfiguredParseWorkers(t *testing.T) {
 		t.Fatalf("Run returned error: %v", err)
 	}
 
-	if !reflect.DeepEqual(*gotCounts, []int{3}) {
-		t.Fatalf("expected configured parse worker count 3, got %v", *gotCounts)
+	if !reflect.DeepEqual(*gotCounts, []int{2}) {
+		t.Fatalf("expected configured parse worker count 2, got %v", *gotCounts)
 	}
 }
 
@@ -144,7 +144,7 @@ func TestRunMultiUsesPerRepoParseWorkersWhenOverrideAbsent(t *testing.T) {
 	tmpDir := t.TempDir()
 	repoDefault := writeNamedEngineFixtureRepo(t, tmpDir, "repo-default")
 	repoConfigured := writeNamedEngineFixtureRepo(t, tmpDir, "repo-configured")
-	if err := os.WriteFile(filepath.Join(repoConfigured, ".stacklitrc.json"), []byte(`{"parse_workers":3}`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoConfigured, ".stacklitrc.json"), []byte(`{"parse_workers":2}`), 0644); err != nil {
 		t.Fatalf("writing config: %v", err)
 	}
 	reposFile := writeReposFile(t, tmpDir, repoDefault, repoConfigured)
@@ -158,8 +158,8 @@ func TestRunMultiUsesPerRepoParseWorkersWhenOverrideAbsent(t *testing.T) {
 		t.Fatalf("RunMulti returned error: %v", err)
 	}
 
-	if !reflect.DeepEqual(*gotCounts, []int{1, 3}) {
-		t.Fatalf("expected per-repo parse worker counts [1 3], got %v", *gotCounts)
+	if !reflect.DeepEqual(*gotCounts, []int{3, 2}) {
+		t.Fatalf("expected per-repo parse worker counts [3 2], got %v", *gotCounts)
 	}
 }
 
@@ -364,6 +364,33 @@ func Open() Store {
 	return Store{Name: "primary"}
 }
 `)
+	// Python and TypeScript files exercise concurrent tree-sitter parsing.
+	writeFixtureFile(t, root, "worker/tasks.py", `import json
+
+
+class TaskRunner:
+    def run(self, payload):
+        return json.dumps(payload)
+
+    def cancel(self):
+        return None
+
+
+def schedule(runner):
+    return runner.run({})
+`)
+	writeFixtureFile(t, root, "web/client.ts", `import { readFile } from "fs";
+
+export class ApiClient {
+  fetchHealth(): string {
+    return "ok";
+  }
+}
+
+export function load(path: string): void {
+  readFile(path, () => undefined);
+}
+`)
 	return root
 }
 
@@ -465,8 +492,15 @@ func normalizeMultiIndexForEquivalence(multi schema.MultiIndex) schema.MultiInde
 
 func assertEquivalenceFixtureIndex(t *testing.T, idx schema.Index) {
 	t.Helper()
-	if idx.Structure.TotalFiles != 4 {
-		t.Fatalf("expected fixture index to include 4 source files, got %d", idx.Structure.TotalFiles)
+	if idx.Structure.TotalFiles != 6 {
+		t.Fatalf("expected fixture index to include 6 source files, got %d", idx.Structure.TotalFiles)
+	}
+	// Only tree-sitter extractors populate TypeDefs; the generic fallback does not.
+	if got := idx.Modules["worker"].TypeDefs["TaskRunner"]; got != "run, cancel" {
+		t.Fatalf("expected tree-sitter Python TypeDefs for TaskRunner, got %q", got)
+	}
+	if got := idx.Modules["web"].TypeDefs["ApiClient"]; got != "fetchHealth" {
+		t.Fatalf("expected tree-sitter TypeScript TypeDefs for ApiClient, got %q", got)
 	}
 	if len(idx.Modules) == 0 {
 		t.Fatal("expected fixture index to include modules")
@@ -481,8 +515,8 @@ func assertEquivalenceFixtureMultiIndex(t *testing.T, multi schema.MultiIndex) {
 	if len(multi.Repos) != 2 {
 		t.Fatalf("expected multi-index to include 2 repos, got %d", len(multi.Repos))
 	}
-	if multi.TotalFiles != 8 {
-		t.Fatalf("expected multi-index to include 8 source files, got %d", multi.TotalFiles)
+	if multi.TotalFiles != 12 {
+		t.Fatalf("expected multi-index to include 12 source files, got %d", multi.TotalFiles)
 	}
 	for _, repo := range multi.Repos {
 		if len(repo.Modules) == 0 {

@@ -31,7 +31,7 @@ func DefaultConfig() *Config {
 		MaxDepth:     4,
 		MaxModules:   200,
 		MaxExports:   10,
-		ParseWorkers: 1,
+		ParseWorkers: 3,
 		Output: OutputConfig{
 			JSON:    "stacklit.json",
 			Mermaid: "DEPENDENCIES.md",
@@ -82,7 +82,7 @@ func load(root string, validate bool) (*Config, error) {
 		cfg.MaxExports = 10
 	}
 	if cfg.ParseWorkers == 0 {
-		cfg.ParseWorkers = 1
+		cfg.ParseWorkers = 3
 	}
 	if cfg.Output.JSON == "" {
 		cfg.Output.JSON = "stacklit.json"
