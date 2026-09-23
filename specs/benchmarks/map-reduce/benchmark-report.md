@@ -4,13 +4,13 @@ Date: 2026-05-31T09:56:24Z
 
 ## Target Repository
 
-- Repository: Omni, cloned from `/home/tangi/Workspace/omni`
-- Benchmark clone: `/tmp/stacklit-benchmark-omni-coder-1-20260531T095624Z`
+- Repository: private mixed-language benchmark repository, cloned from `<benchmark-repo>`
+- Benchmark clone: `/tmp/stacklit-benchmark-coder-1-20260531T095624Z`
 - Fixed state: `462588106cf285c017778073a22ac2e7e57376c2`
 - Clone preparation:
-  - `git clone --no-checkout /home/tangi/Workspace/omni /tmp/stacklit-benchmark-omni-coder-1-20260531T095624Z`
-  - `git -C /tmp/stacklit-benchmark-omni-coder-1-20260531T095624Z checkout --detach 462588106cf285c017778073a22ac2e7e57376c2`
-- Clean-state check after benchmark: `git -C /tmp/stacklit-benchmark-omni-coder-1-20260531T095624Z status --short --branch` reported `## HEAD (no branch)`.
+  - `git clone --no-checkout <benchmark-repo> /tmp/stacklit-benchmark-coder-1-20260531T095624Z`
+  - `git -C /tmp/stacklit-benchmark-coder-1-20260531T095624Z checkout --detach 462588106cf285c017778073a22ac2e7e57376c2`
+- Clean-state check after benchmark: `git -C /tmp/stacklit-benchmark-coder-1-20260531T095624Z status --short --branch` reported `## HEAD (no branch)`.
 
 ## Stacklit Build
 
@@ -34,7 +34,7 @@ The temporary build main delegates to `github.com/glincker/stacklit/internal/cli
 
 ## Timing Results
 
-All timing commands were run from `/tmp/stacklit-benchmark-omni-coder-1-20260531T095624Z`. Generated JSON outputs were kept in `/tmp/stacklit-workers-{1,2,4,8}.json` and are not committed.
+All timing commands were run from `/tmp/stacklit-benchmark-coder-1-20260531T095624Z`. Generated JSON outputs were kept in `/tmp/stacklit-workers-{1,2,4,8}.json` and are not committed.
 
 | Parse workers | Command | Wall time | Maximum RSS |
 |---:|---|---:|---:|
@@ -47,7 +47,7 @@ JSON output sizes observed in `/tmp`: each worker output was `46K`.
 
 ## CPU Profile Capture
 
-CPU profiles were captured with the same `/tmp/stacklit-map-reduce-benchmark` binary from the same Omni clone and fixed commit. The only added environment variable selects the output profile path.
+CPU profiles were captured with the same `/tmp/stacklit-map-reduce-benchmark` binary from the same benchmark clone and fixed commit. The only added environment variable selects the output profile path.
 
 ```bash
 STACKLIT_BENCH_CPU_PROFILE=/home/tangi/Workspace/stacklit/.worktrees/architecture-main-1-architecture-3-code-planning-0-coding-1-replacement-0/specs/benchmarks/map-reduce/worker-1.cpu.pprof /tmp/stacklit-map-reduce-benchmark generate-json --parse-workers 1 -o /tmp/stacklit-workers-1.json

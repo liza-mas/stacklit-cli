@@ -232,7 +232,7 @@ Each scope becomes a code-planning child task. Scope 0 is emitted only because t
 
 **Boundary:** Owns README/USAGE updates and a repo-tracked benchmark report. Does not change parser, config, CLI, engine, graph, or renderer behavior.
 
-**Done when:** Documentation explains `.stacklitrc.json` and CLI worker controls plus memory tradeoffs, and benchmark evidence reports wall time and max RSS for worker counts 1, 2, 4, and 8 on Omni or an equivalent large mixed-language repository at a fixed repository state.
+**Done when:** Documentation explains `.stacklitrc.json` and CLI worker controls plus memory tradeoffs, and benchmark evidence reports wall time and max RSS for worker counts 1, 2, 4, and 8 on a large mixed-language repository at a fixed repository state.
 
 **Depends on:** Scope 2.
 

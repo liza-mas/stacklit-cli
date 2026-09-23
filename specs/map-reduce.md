@@ -8,7 +8,7 @@ Reduce `stacklit generate-json` latency on large repositories by parsing source 
 
 ## Context
 
-Profiling `generate-json` against `/home/tangi/Workspace/omni` showed the parse phase dominates runtime. The profiled run took about 2m31s wall time and reached about 4.6GB max RSS. CPU samples showed roughly 91% cumulative time under `parser.(*TreeSitterParser).Parse`, with most time inside `gotreesitter.(*Parser).Parse` and its GLR stack merge/equivalence logic.
+Profiling `generate-json` against `<benchmark-repo>` showed the parse phase dominates runtime. The profiled run took about 2m31s wall time and reached about 4.6GB max RSS. CPU samples showed roughly 91% cumulative time under `parser.(*TreeSitterParser).Parse`, with most time inside `gotreesitter.(*Parser).Parse` and its GLR stack merge/equivalence logic.
 
 The current Stacklit pipeline already has a natural map-reduce shape:
 
@@ -26,8 +26,8 @@ Applies to: `stacklit generate-json` and the shared engine/parser path used to p
 - Code: `internal/parser/parser.go` — `ParseAll` loops over file paths sequentially.
 - Code: `internal/parser/treesitter.go` — `TreeSitterParser.Parse` creates a new gotreesitter parser per file.
 - Code: `internal/engine/engine.go` — `engine.Run` calls `walker.Walk`, then `parser.ParseAll`, then graph/index assembly.
-- Profiling artifact: `/tmp/stacklit-generate-json.cpu.pprof` — Omni CPU profile captured from a real generation run.
-- Profiling artifact: `/tmp/stacklit-omni-generate-json-flamegraph.png` — flamegraph of the same run.
+- Profiling artifact: `/tmp/stacklit-generate-json.cpu.pprof` — CPU profile of the benchmark repository captured from a real generation run.
+- Profiling artifact: `/tmp/stacklit-generate-json-flamegraph.png` — flamegraph of the same run.
 - External documentation: Tree-sitter parser documentation — syntax trees must not be shared concurrently without copying.
 
 ### Non-Functional Requirements
@@ -55,7 +55,7 @@ Applies to: `stacklit generate-json` and the shared engine/parser path used to p
 ### Assumptions
 
 - **ASM-000-1**: File-level parsing is independent for Stacklit's current extracted metadata — *Why*: `ParseFile` receives only one path and file contents, and graph assembly happens after all files are parsed — Confidence: HIGH.
-- **ASM-000-2**: A bounded worker pool can improve wall time when hot parse work is distributed across many files — *Why*: Omni contains hundreds of parseable files and the current loop is sequential — Confidence: MEDIUM.
+- **ASM-000-2**: A bounded worker pool can improve wall time when hot parse work is distributed across many files — *Why*: the benchmark repository contains hundreds of parseable files and the current loop is sequential — Confidence: MEDIUM.
 - **ASM-000-3**: Worker counts above available CPU or memory capacity may reduce stability or performance — *Why*: the profiled sequential run already had high RSS, and concurrent Tree-sitter parses can multiply live parser state — Confidence: HIGH.
 
 ### Open Questions
@@ -72,7 +72,7 @@ Applies to: `stacklit generate-json` and the shared engine/parser path used to p
 
 - Code: `internal/parser/parser.go` — current sequential `ParseAll`.
 - Code: `internal/parser/treesitter.go` — parser-per-file behavior.
-- Profiling artifact: `/tmp/stacklit-omni-generate-json-flamegraph.png`.
+- Profiling artifact: `/tmp/stacklit-generate-json-flamegraph.png`.
 
 ### Functional Requirements
 
@@ -136,7 +136,7 @@ Implementation ordering:
 
 - NFR-002-1: The default worker count must be conservative enough to avoid severe memory spikes on large repositories.
 - NFR-002-2: Configuration must be compatible with existing `.stacklitrc.json` files.
-- NFR-002-3: Benchmark evidence must compare at least worker counts 1, 2, 4, and 8 on Omni or an equivalent large mixed-language repository before changing the default above one.
+- NFR-002-3: Benchmark evidence must compare at least worker counts 1, 2, 4, and 8 on a large mixed-language repository before changing the default above one.
 
 ### Acceptance Criteria
 

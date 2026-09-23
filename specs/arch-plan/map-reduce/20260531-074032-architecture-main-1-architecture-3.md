@@ -25,7 +25,7 @@ The parent map-reduce architecture splits runtime implementation from rollout ev
 - Runtime behavior remains read-only for this scope: no parser, config, CLI, engine, graph, renderer, schema, or generated index behavior changes.
 - Documentation must describe both durable `.stacklitrc.json` control and command-local `generate-json --parse-workers` control after the worker-count control scope implements them.
 - Documentation must state the memory tradeoff: higher worker counts can reduce wall time but may increase maximum RSS because more parser work can be live concurrently.
-- Benchmark evidence must compare worker counts 1, 2, 4, and 8 on Omni or an equivalent large mixed-language repository at a fixed repository state.
+- Benchmark evidence must compare worker counts 1, 2, 4, and 8 on a large mixed-language repository at a fixed repository state.
 - Benchmark evidence must include wall time, maximum RSS, and CPU profile evidence for every compared worker count.
 - The default worker count remains `1` in this goal; benchmark evidence is a rollout input, not permission for this scope to raise the default.
 - The canonical validation commands and profile file paths are fixed by the assigned task.
@@ -144,7 +144,7 @@ Each scope becomes a code-planning child task. No bootstrap-precommit output ent
 
 **Boundary:** Owns README/USAGE updates and a repo-tracked benchmark report with wall time, CPU profile evidence, and max RSS for worker counts 1, 2, 4, and 8. Does not change parser, config, CLI, engine, graph, or renderer behavior.
 
-**Done when:** Documentation explains `.stacklitrc.json` and CLI worker controls plus memory tradeoffs, and benchmark evidence reports wall time, CPU profile evidence, and max RSS for worker counts 1, 2, 4, and 8 on Omni or an equivalent large mixed-language repository at a fixed repository state.
+**Done when:** Documentation explains `.stacklitrc.json` and CLI worker controls plus memory tradeoffs, and benchmark evidence reports wall time, CPU profile evidence, and max RSS for worker counts 1, 2, 4, and 8 on a large mixed-language repository at a fixed repository state.
 
 **Depends on:** Existing task `architecture-main-1-architecture-2-code-planning-0` for the runtime worker-control plan.
 
