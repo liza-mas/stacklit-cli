@@ -314,7 +314,7 @@ The summary prioritizes the main end-to-end flow over specialized details and co
 
 Use exact module paths for stable purpose entries. Basename purpose keys are broad overrides and may apply to every current module with that basename.
 
-Use `stacklit derive --ai-summary` to include the stored summary in the compact map. This is read-only and does not call the summary command.
+Use `stacklit derive --ai-summary` to include the stored summary in the compact map. If `architecture.ai_summary` is absent, empty, or whitespace-only, the command warns on stderr and prints the map without the AI summary section, exiting successfully. This is read-only and does not call the summary command.
 
 </details>
 

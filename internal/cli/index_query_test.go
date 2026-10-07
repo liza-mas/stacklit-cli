@@ -186,25 +186,60 @@ func TestDeriveExposesAISummaryFlag(t *testing.T) {
 	}
 }
 
-func TestDeriveAISummaryRequiresSummary(t *testing.T) {
-	root := t.TempDir()
-	indexPath := filepath.Join(root, "stacklit.json")
-	if err := os.WriteFile(indexPath, []byte(`{
-  "project": {"name": "demo"},
-  "tech": {"primary_language": "go"},
-  "modules": {}
-}`), 0644); err != nil {
-		t.Fatalf("writing index fixture: %v", err)
+func TestDeriveAISummaryOutput(t *testing.T) {
+	const summary = "A focused CLI around an indexing pipeline."
+	const plainMap = "demo | go | 1 modules | 0 lines\n\nmodules:\n  root  root files\n"
+	tests := []struct {
+		name         string
+		architecture string
+		include      bool
+		wantWarning  bool
+		wantSummary  bool
+	}{
+		{name: "absent architecture", include: true, wantWarning: true},
+		{name: "absent field", architecture: `,"architecture":{}`, include: true, wantWarning: true},
+		{name: "empty", architecture: `,"architecture":{"ai_summary":""}`, include: true, wantWarning: true},
+		{name: "whitespace", architecture: `,"architecture":{"ai_summary":" \n\t "}`, include: true, wantWarning: true},
+		{name: "populated", architecture: `,"architecture":{"ai_summary":"` + summary + `"}`, include: true, wantSummary: true},
+		{name: "absent without flag"},
+		{name: "populated without flag", architecture: `,"architecture":{"ai_summary":"` + summary + `"}`},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			indexPath := filepath.Join(t.TempDir(), "stacklit.json")
+			data := `{"project":{"name":"demo"},"tech":{"primary_language":"go"},"modules":{"root":{"purpose":"Root files"}}` + tt.architecture + `}`
+			if err := os.WriteFile(indexPath, []byte(data), 0644); err != nil {
+				t.Fatalf("writing index fixture: %v", err)
+			}
 
-	cmd := newDeriveCmd()
-	cmd.SetArgs([]string{"-i", indexPath, "--ai-summary"})
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected missing AI summary error")
-	}
-	if !strings.Contains(err.Error(), "has no architecture.ai_summary") {
-		t.Fatalf("expected missing AI summary message, got %v", err)
+			var stdout, stderr bytes.Buffer
+			cmd := newDeriveCmd()
+			cmd.SetOut(&stdout)
+			cmd.SetErr(&stderr)
+			args := []string{"-i", indexPath}
+			if tt.include {
+				args = append(args, "--ai-summary")
+			}
+			cmd.SetArgs(args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("derive returned error: %v", err)
+			}
+
+			wantOutput := plainMap
+			if tt.wantSummary {
+				wantOutput = strings.Replace(plainMap, "\nmodules:\n", "\nai-summary:\n"+summary+"\n\nmodules:\n", 1)
+			}
+			if stdout.String() != wantOutput {
+				t.Fatalf("stdout = %q, want %q", stdout.String(), wantOutput)
+			}
+			wantWarning := ""
+			if tt.wantWarning {
+				wantWarning = "Warning: " + indexPath + " has no architecture.ai_summary; omitting ai-summary section. Run 'stacklit ai-summary' then 'stacklit generate-json'.\n"
+			}
+			if stderr.String() != wantWarning {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), wantWarning)
+			}
+		})
 	}
 }
 

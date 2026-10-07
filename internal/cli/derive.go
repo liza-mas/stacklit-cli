@@ -39,11 +39,13 @@ replacing 3,000-8,000 tokens of agent exploration per session.`,
 			})
 			if err != nil {
 				if errors.Is(err, derive.ErrMissingAISummary) {
-					return fmt.Errorf("%s has no architecture.ai_summary; run 'stacklit ai-summary' then 'stacklit generate-json'", deriveInput)
+					cmd.PrintErrf("Warning: %s has no architecture.ai_summary; omitting ai-summary section. Run 'stacklit ai-summary' then 'stacklit generate-json'.\n", deriveInput)
+					output = derive.CompactMap(&idx)
+				} else {
+					return err
 				}
-				return err
 			}
-			fmt.Print(output)
+			fmt.Fprint(cmd.OutOrStdout(), output)
 			return nil
 		},
 	}
