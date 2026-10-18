@@ -22,7 +22,7 @@ const (
 	envCmd     = "STACKLIT_SUMMARY_CMD"
 	envTimeout = "STACKLIT_SUMMARY_TIMEOUT"
 
-	defaultTimeoutSec = 5 * 60
+	defaultTimeoutSec = 10 * 60
 	stderrTail        = 500
 	inputJSONMarker   = "--- Stacklit input JSON ---\n"
 )

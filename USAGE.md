@@ -270,10 +270,10 @@ For the default Claude command, insight-generation instructions are passed with 
 
 `STACKLIT_SUMMARY_CMD` is split on whitespace. Shell-style quoted arguments are not preserved, so prefer simple command lines or a small wrapper script for complex invocations.
 
-The timeout defaults to 300 seconds for the entire single invocation, including drafting and reconciliation. Override it with `STACKLIT_SUMMARY_TIMEOUT`:
+The timeout defaults to 600 seconds for the entire single invocation, including drafting and reconciliation. Override it with `STACKLIT_SUMMARY_TIMEOUT`:
 
 ```bash
-STACKLIT_SUMMARY_TIMEOUT=300 stacklit ai-summary
+STACKLIT_SUMMARY_TIMEOUT=900 stacklit ai-summary
 ```
 
 `ai-summary` uses this local CLI path; it does not call the direct Anthropic API helper.

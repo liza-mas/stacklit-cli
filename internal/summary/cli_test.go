@@ -23,9 +23,9 @@ func TestDefaultCommandAppendsSystemPrompt(t *testing.T) {
 	}
 }
 
-func TestDefaultSummaryTimeoutIsFiveMinutes(t *testing.T) {
-	if defaultTimeoutSec != 5*60 {
-		t.Fatalf("expected default summary timeout to be 300 seconds, got %d", defaultTimeoutSec)
+func TestDefaultSummaryTimeoutIsTenMinutes(t *testing.T) {
+	if defaultTimeoutSec != 10*60 {
+		t.Fatalf("expected default summary timeout to be 600 seconds, got %d", defaultTimeoutSec)
 	}
 }
 
