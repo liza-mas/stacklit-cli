@@ -249,14 +249,14 @@ By default, Stacklit runs:
 claude -p --system-prompt "<insight-generation instructions>"
 ```
 
-Override the command prefix with `STACKLIT_SUMMARY_CMD`. Stacklit appends the insight-generation prompt after this prefix and sends the compact JSON snapshot on stdin:
+Override the command prefix with `STACKLIT_SUMMARY_CMD`. Stacklit appends the insight-generation prompt after this prefix and sends documentation excerpts and the compact JSON snapshot on stdin:
 
 ```bash
 STACKLIT_SUMMARY_CMD="claude -p --system-prompt" stacklit ai-summary
 STACKLIT_SUMMARY_CMD="codex exec --dangerously-bypass-approvals-and-sandbox" stacklit ai-summary
 ```
 
-For the default Claude command, insight-generation instructions are passed with `--system-prompt` and stdin contains only the compact JSON snapshot. Custom `STACKLIT_SUMMARY_CMD` prefixes receive the generated prompt as their final argument and must write the insights JSON object to stdout. The agent must support file reads to inspect repository evidence and perform the deferred reconciliation step.
+For the default Claude command, insight-generation instructions are passed with `--system-prompt`. Stdin contains the compact JSON snapshot; when documentation is found, it is preceded by a `--- documentation excerpts ---` … `--- end documentation excerpts ---` block and a `--- Stacklit input JSON ---` line. Excerpts travel on stdin because Linux rejects any single argument of 128 KiB or more. Custom `STACKLIT_SUMMARY_CMD` prefixes receive the generated prompt as their final argument and must write the insights JSON object to stdout. The agent must support file reads to inspect repository evidence and perform the deferred reconciliation step.
 
 `STACKLIT_SUMMARY_CMD` is split on whitespace. Shell-style quoted arguments are not preserved, so prefer simple command lines or a small wrapper script for complex invocations.
 

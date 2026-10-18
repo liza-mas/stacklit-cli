@@ -42,13 +42,14 @@ func TestSummaryCommandAppendsPromptToCustomPrefix(t *testing.T) {
 
 func TestCodexExecInvocationUsesStdinForPromptAndInput(t *testing.T) {
 	prefix := []string{"/usr/local/bin/codex", "exec", "--dangerously-bypass-approvals-and-sandbox"}
-	command, input := summaryInvocation(prefix, "Prompt instructions", `{"project":"stacklit"}`)
+	command, input := summaryInvocation(prefix, "Prompt instructions", "\n--- README.md ---\nDoc evidence", `{"project":"stacklit"}`)
 
 	if !slices.Equal(command, prefix) {
 		t.Fatalf("expected codex command without prompt argument, got %v", command)
 	}
-	if !strings.Contains(input, "Prompt instructions") || !strings.Contains(input, `{"project":"stacklit"}`) {
-		t.Fatalf("expected prompt and JSON on stdin, got %q", input)
+	want := "Prompt instructions\n\n--- documentation excerpts ---\n\n--- README.md ---\nDoc evidence\n--- end documentation excerpts ---\n--- Stacklit input JSON ---\n{\"project\":\"stacklit\"}"
+	if input != want {
+		t.Fatalf("expected prompt, excerpts, and JSON on stdin, got %q", input)
 	}
 }
 
@@ -172,7 +173,10 @@ func TestSummaryPromptInspectionAndDocumentation(t *testing.T) {
 					t.Fatal("documentation instructions must follow supplied document presence")
 				}
 				if suppliedDocs != "" {
-					if !strings.HasSuffix(prompt, docs+"\n--- end documentation excerpts ---\n") {
+					if strings.Contains(prompt, "Decision index evidence") {
+						t.Fatal("documentation excerpts must stay out of the prompt argument")
+					}
+					if !strings.HasSuffix(documentationExcerpts(docs), docs+"\n--- end documentation excerpts ---\n") {
 						t.Fatal("documentation excerpts must have an explicit closing marker")
 					}
 					if !strings.Contains(prompt, "Review and cite README.md when present") ||
@@ -255,6 +259,63 @@ printf '%s\n' '{"purpose":{"core":"Final purpose"},"hints":{"add_feature":"Final
 				t.Fatalf("Run created the output file before the caller's merge: %v", err)
 			}
 		})
+	}
+}
+
+func TestRunSendsDocumentationExcerptsOnStdin(t *testing.T) {
+	// GIVEN documentation whose digest exceeds Linux's 128 KiB single-argument limit
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	for i := range maxDocumentationFiles {
+		content := fmt.Sprintf("DOC_%d_EVIDENCE\n", i) + strings.Repeat("x\n", maxDocumentationBytes/2)
+		if err := os.WriteFile(filepath.Join(root, "docs", fmt.Sprintf("doc-%02d.md", i)), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	promptPath := filepath.Join(root, "prompt.txt")
+	inputPath := filepath.Join(root, "input.txt")
+	t.Setenv("SUMMARY_TEST_PROMPT", promptPath)
+	t.Setenv("SUMMARY_TEST_INPUT", inputPath)
+	script := filepath.Join(root, "summary")
+	if err := os.WriteFile(script, []byte(`#!/bin/sh
+printf '%s' "$*" > "$SUMMARY_TEST_PROMPT"
+cat > "$SUMMARY_TEST_INPUT"
+printf '%s\n' '{"architecture":{"ai_summary":"Final summary."}}'
+`), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(envCmd, script)
+
+	// WHEN the summary command runs
+	got, err := Run(&schema.Index{Project: schema.Project{Name: "INDEX_MARKER"}}, filepath.Join(root, "insights.json"), root)
+
+	// THEN instructions stay in the argument while excerpts precede the JSON on stdin
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Architecture.Summary != "Final summary." {
+		t.Fatalf("unexpected insights: %+v", got)
+	}
+	prompt, err := os.ReadFile(promptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := os.ReadFile(inputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(prompt), "DOC_0_EVIDENCE") || !strings.Contains(string(prompt), "\nDOCUMENTATION:\n") {
+		t.Fatal("argument must carry documentation instructions without the excerpts")
+	}
+	excerpts, snapshot, ok := strings.Cut(string(input), "\n--- end documentation excerpts ---\n--- Stacklit input JSON ---\n")
+	if !ok || !strings.HasPrefix(excerpts, "--- documentation excerpts ---\n") || !strings.Contains(excerpts, "DOC_11_EVIDENCE") {
+		t.Fatalf("stdin must start with delimited documentation excerpts, got prefix %.200q", input)
+	}
+	var decoded indexSnapshot
+	if err := json.Unmarshal([]byte(snapshot), &decoded); err != nil || decoded.Project.Name != "INDEX_MARKER" {
+		t.Fatalf("stdin must end with the JSON snapshot: %v", err)
 	}
 }
 

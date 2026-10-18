@@ -24,6 +24,7 @@ const (
 
 	defaultTimeoutSec = 5 * 60
 	stderrTail        = 500
+	inputJSONMarker   = "--- Stacklit input JSON ---\n"
 )
 
 // Run invokes one agent session to draft fresh insights, then read and reconcile
@@ -54,7 +55,7 @@ func Run(idx *schema.Index, insightsPath, root string) (*insights.File, error) {
 		return nil, fmt.Errorf("marshalling index snapshot: %w", err)
 	}
 
-	command, input := summaryInvocation(commandPrefix, sessionPrompt(idx, docs, root, insightsPath), string(userJSON))
+	command, input := summaryInvocation(commandPrefix, sessionPrompt(idx, docs, root, insightsPath), docs, string(userJSON))
 	return runSummaryCommand(timeout, command, input)
 }
 
@@ -103,9 +104,13 @@ func summaryCommand(prefix []string, prompt string) []string {
 	return command
 }
 
-func summaryInvocation(prefix []string, prompt, input string) ([]string, string) {
+func summaryInvocation(prefix []string, prompt, docs, input string) ([]string, string) {
+	excerpts := documentationExcerpts(docs)
 	if len(prefix) >= 2 && filepath.Base(prefix[0]) == "codex" && prefix[1] == "exec" {
-		return prefix, prompt + "\n\n--- Stacklit input JSON ---\n" + input
+		return prefix, prompt + "\n\n" + excerpts + inputJSONMarker + input
+	}
+	if excerpts != "" {
+		input = excerpts + inputJSONMarker + input
 	}
 	return summaryCommand(prefix, prompt), input
 }

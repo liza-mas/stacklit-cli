@@ -129,13 +129,21 @@ Review and cite README.md when present. Point readers to useful files or locatio
 Link the decision index when one is identified, otherwise the ADR directory; cite individual decisions only when they materially explain a claim.
 No particular document names or layout are required.
 Assess documents' currency and applicability rather than giving one document type automatic precedence.
-
---- documentation excerpts ---
-` + docs + "\n--- end documentation excerpts ---\n"
+Documentation excerpts are supplied in the input, before the Stacklit input JSON.
+`
 	} else {
 		prompt += "\nNo reference documentation was supplied.\n"
 	}
 	return prompt
+}
+
+// documentationExcerpts delimits docs for the input stream, keeping argv below
+// Linux's 128 KiB per-argument limit.
+func documentationExcerpts(docs string) string {
+	if docs == "" {
+		return ""
+	}
+	return "--- documentation excerpts ---\n" + docs + "\n--- end documentation excerpts ---\n"
 }
 
 // snapshotFor strips maintained insights without mutating the index used for merging.
