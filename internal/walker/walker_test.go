@@ -1,8 +1,11 @@
 package walker_test
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"testing"
 
@@ -139,4 +142,184 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// writeFile creates dir/rel with minimal content, creating parent directories.
+func writeFile(t *testing.T, dir, rel string) {
+	t.Helper()
+	path := filepath.Join(dir, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("package foo\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// runGit runs git in dir, isolated from the user's global and system config.
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{
+		"-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false",
+	}, args...)...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// newGitRepo returns an initialized, empty git repository, skipping the test
+// when git is unavailable.
+func newGitRepo(t *testing.T) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-q")
+	return dir
+}
+
+func walkFiles(t *testing.T, root string, extraIgnore []string) []string {
+	t.Helper()
+	files, err := walker.Walk(root, extraIgnore)
+	if err != nil {
+		t.Fatalf("Walk returned error: %v", err)
+	}
+	return files
+}
+
+func TestWalkGitIndexesOnlyTrackedAndStaged(t *testing.T) {
+	dir := newGitRepo(t)
+	writeFile(t, dir, "tracked.go")
+	runGit(t, dir, "add", "tracked.go")
+	runGit(t, dir, "commit", "-q", "-m", "init")
+	writeFile(t, dir, "staged.go")
+	runGit(t, dir, "add", "staged.go")
+	writeFile(t, dir, "untracked.go")
+	writeFile(t, dir, "excluded/local.go")
+	if err := os.WriteFile(filepath.Join(dir, ".git", "info", "exclude"), []byte("excluded/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := walkFiles(t, dir, nil)
+	want := []string{"staged.go", "tracked.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Walk = %v, want %v", got, want)
+	}
+}
+
+func TestWalkGitSkipsTrackedFilesDeletedFromWorkTree(t *testing.T) {
+	dir := newGitRepo(t)
+	writeFile(t, dir, "kept.go")
+	writeFile(t, dir, "deleted.go")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-q", "-m", "init")
+	if err := os.Remove(filepath.Join(dir, "deleted.go")); err != nil {
+		t.Fatal(err)
+	}
+
+	got := walkFiles(t, dir, nil)
+	want := []string{"kept.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Walk = %v, want %v", got, want)
+	}
+}
+
+func TestWalkGitAppliesAlwaysIgnoreAndExtraIgnore(t *testing.T) {
+	dir := newGitRepo(t)
+	for _, rel := range []string{"main.go", "vendor/dep.go", "pkg/vendor/dep.go", "gen/out.go", "pkg/skip.go", "README.md"} {
+		writeFile(t, dir, rel)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-q", "-m", "init")
+
+	got := walkFiles(t, dir, []string{"gen/", "pkg/skip.go"})
+	want := []string{"main.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Walk = %v, want %v", got, want)
+	}
+}
+
+func TestWalkGitSubdirectoryRootReturnsRootRelativePaths(t *testing.T) {
+	dir := newGitRepo(t)
+	writeFile(t, dir, "outside.go")
+	writeFile(t, dir, "sub/inner/a.go")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-q", "-m", "init")
+
+	got := walkFiles(t, filepath.Join(dir, "sub"), nil)
+	want := []string{"inner/a.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Walk = %v, want %v", got, want)
+	}
+}
+
+func TestWalkGitUntrackedRootReturnsNoFiles(t *testing.T) {
+	dir := newGitRepo(t)
+	writeFile(t, dir, "main.go")
+	runGit(t, dir, "add", "main.go")
+	runGit(t, dir, "commit", "-q", "-m", "init")
+	writeFile(t, dir, "local/untracked.go")
+	if err := os.WriteFile(filepath.Join(dir, ".git", "info", "exclude"), []byte("local/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := walkFiles(t, filepath.Join(dir, "local"), nil); len(got) != 0 {
+		t.Errorf("Walk = %v, want no files", got)
+	}
+}
+
+func TestWalkGitListsUnmergedFileOnce(t *testing.T) {
+	dir := newGitRepo(t)
+	write := func(content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("package a\n")
+	runGit(t, dir, "add", "a.go")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	runGit(t, dir, "checkout", "-q", "-b", "side")
+	write("package a // side\n")
+	runGit(t, dir, "commit", "-q", "-am", "side")
+	runGit(t, dir, "checkout", "-q", "-")
+	write("package a // main\n")
+	runGit(t, dir, "commit", "-q", "-am", "main")
+	// The merge is expected to fail with a conflict, leaving three index stages for a.go.
+	merge := exec.Command("git", "-c", "user.name=test", "-c", "user.email=test@example.com", "merge", "-q", "side")
+	merge.Dir = dir
+	merge.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+	if err := merge.Run(); err == nil {
+		t.Fatal("expected merge conflict")
+	}
+	unmerged := exec.Command("git", "ls-files", "--unmerged")
+	unmerged.Dir = dir
+	if out, err := unmerged.Output(); err != nil || len(bytes.Split(bytes.TrimSpace(out), []byte("\n"))) != 3 {
+		t.Fatalf("expected three unmerged index stages, got %q (err %v)", out, err)
+	}
+
+	got := walkFiles(t, dir, nil)
+	want := []string{"a.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Walk = %v, want %v", got, want)
+	}
+}
+
+func TestWalkOutsideGitHonorsRootGitignore(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "main.go")
+	writeFile(t, dir, "generated/x.go")
+	writeFile(t, dir, "skip.go")
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("generated/\nskip.go\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := walkFiles(t, dir, nil)
+	want := []string{"main.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Walk = %v, want %v", got, want)
+	}
 }

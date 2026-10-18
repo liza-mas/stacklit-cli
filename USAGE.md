@@ -327,7 +327,9 @@ Create `.stacklitrc.json` in your project root (optional):
 }
 ```
 
-Keys: `ignore` (extra paths on top of `.gitignore`), `max_depth` (module detection depth, default 4), `max_modules` (collapse threshold, default 200), `max_exports` (per module, default 10), `parse_workers` (parser worker count, default 3), and `output.json` (default JSON output path).
+Inside a git repository, Stacklit indexes only files in the git index (tracked or staged), so untracked and git-ignored files are never scanned; `git add` a new file to include it before committing. A scanned root with nothing tracked or staged yields an empty index. Outside a git repository, or when git is unavailable, Stacklit walks the filesystem and honors the root `.gitignore`. Common dependency and build directories (`node_modules`, `vendor`, `dist`, `build`, ...) are always skipped.
+
+Keys: `ignore` (extra paths excluded on top of git tracking, or of `.gitignore` outside git), `max_depth` (module detection depth, default 4), `max_modules` (collapse threshold, default 200), `max_exports` (per module, default 10), `parse_workers` (parser worker count, default 3), and `output.json` (default JSON output path).
 
 `stacklit generate-json` and `stacklit diff` honor `output.json` when `-o` or `-i` is not passed. The legacy config keys `output.mermaid` and `output.html` may still be present in old config files, but this CLI no longer has the old full-generation command that wrote `DEPENDENCIES.md` and configured HTML. `stacklit view` always regenerates `stacklit.html` from an index.
 
