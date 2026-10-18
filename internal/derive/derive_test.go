@@ -45,6 +45,26 @@ func TestCompactMapWithOptionsRequiresAISummaryWhenRequested(t *testing.T) {
 	}
 }
 
+func TestCompactMapKeepsLongModuleNames(t *testing.T) {
+	long := "submodules/execution-engine/internal/stacklitindex"
+	idx := &schema.Index{
+		Project: schema.Project{Name: "demo"},
+		Tech:    schema.Tech{PrimaryLanguage: "go"},
+		Modules: map[string]schema.ModuleInfo{
+			long:  {Purpose: "Long"},
+			"cli": {Purpose: "Short"},
+		},
+	}
+
+	got := CompactMap(idx)
+	if !strings.Contains(got, "\n  "+long+"  long\n") {
+		t.Fatalf("expected full long module name, got:\n%s", got)
+	}
+	if want := "\n  cli" + strings.Repeat(" ", 30-len("cli")) + "  short\n"; !strings.Contains(got, want) {
+		t.Fatalf("expected short module name padded to 30 chars, got:\n%s", got)
+	}
+}
+
 func TestStripBlockRemovesInjectedBlockOnly(t *testing.T) {
 	idx := &schema.Index{
 		Project: schema.Project{Name: "demo"},

@@ -89,7 +89,7 @@ func CompactMapWithOptions(idx *schema.Index, opts CompactMapOptions) (string, e
 			maxLen = len(name)
 		}
 	}
-	// Cap padding at 30 chars.
+	// Cap alignment width at 30 chars; longer names overflow rather than truncate.
 	if maxLen > 30 {
 		maxLen = 30
 	}
@@ -207,10 +207,7 @@ func blockBounds(content string) (start, end int, ok bool) {
 //	internal/auth/    → jwt, session | depends: store, config
 func formatModuleLine(name string, mod schema.ModuleInfo, padTo int) string {
 	display := name
-	if len(display) > padTo {
-		display = display[:padTo]
-	}
-	padded := display + strings.Repeat(" ", padTo-len(display))
+	padded := display + strings.Repeat(" ", max(padTo-len(display), 0))
 
 	// Purpose as brief descriptor.
 	purpose := strings.ToLower(mod.Purpose)
