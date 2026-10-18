@@ -3,8 +3,11 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -430,6 +433,8 @@ func TestGenerateJSONProceedsWithoutDefaultInsights(t *testing.T) {
 
 func TestAISummaryWritesGeneratedInsights(t *testing.T) {
 	root := t.TempDir()
+	// Insights commands describe the working directory, so run from the fixture root.
+	restoreWorkingDirectory(t, root)
 	indexPath := filepath.Join(root, "stacklit.json")
 	outputPath := filepath.Join(root, "custom insights.json")
 	summaryPath := filepath.Join(root, "summary")
@@ -461,6 +466,10 @@ func TestAISummaryWritesGeneratedInsights(t *testing.T) {
   "purpose": {
     "internal/cli": "Existing curated purpose",
     "internal/removed": "Removed module"
+  },
+  "hints": {
+    "env_vars": ["CURATED_VAR"],
+    "do_not_touch": ["missing/"]
   }
 }`), 0644); err != nil {
 		t.Fatalf("writing existing insights: %v", err)
@@ -521,6 +530,114 @@ JSON
 	if got.Architecture.Summary != "A focused CLI around an indexing pipeline." {
 		t.Fatalf("expected generated architecture summary, got %+v", got.Architecture)
 	}
+	// The root is not a git work tree, so env var references cannot be checked and all are kept.
+	if want := []string{"CURATED_VAR", "STACKLIT_SUMMARY_CMD"}; !slices.Equal(got.Hints.EnvVars, want) {
+		t.Fatalf("expected env vars %v to be kept outside git, got %v", want, got.Hints.EnvVars)
+	}
+	if len(got.Hints.DoNotTouch) != 0 {
+		t.Fatalf("expected missing do_not_touch path to be pruned, got %v", got.Hints.DoNotTouch)
+	}
+}
+
+// newPruneFixture creates a git repository holding an index under cache/ and
+// stale and valid insight hints, and makes it the working directory.
+func newPruneFixture(t *testing.T) (indexPath, outputPath string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found on PATH")
+	}
+	root := t.TempDir()
+	idx := schema.Index{
+		Modules: map[string]schema.ModuleInfo{"root": {Purpose: "Entry point", Files: 1, Lines: 1}},
+		Hints:   schema.Hints{EnvVars: []string{"CODE_VAR", "GONE_VAR"}},
+	}
+	data, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatalf("marshalling index fixture: %v", err)
+	}
+	for rel, content := range map[string]string{
+		"cache/index.json":       string(data),
+		"stacklit-insights.json": `{"hints":{"env_vars":["CODE_VAR","GONE_VAR"],"do_not_touch":["migrations/","missing/"]}}`,
+		"main.go":                `package main; import "os"; var _ = os.Getenv("CODE_VAR")`,
+		"migrations/001.sql":     "select 1;",
+	} {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, args := range [][]string{{"init", "-q"}, {"add", "."}} {
+		git := exec.Command("git", args...)
+		git.Dir = root
+		git.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+		if out, err := git.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	restoreWorkingDirectory(t, root)
+	return "cache/index.json", "stacklit-insights.json"
+}
+
+func assertHints(t *testing.T, outputPath string, wantEnv, wantDoNotTouch []string) {
+	t.Helper()
+	got, err := insights.Load(outputPath)
+	if err != nil {
+		t.Fatalf("loading insights: %v", err)
+	}
+	if !slices.Equal(got.Hints.EnvVars, wantEnv) {
+		t.Errorf("EnvVars = %v, want %v", got.Hints.EnvVars, wantEnv)
+	}
+	if !slices.Equal(got.Hints.DoNotTouch, wantDoNotTouch) {
+		t.Errorf("DoNotTouch = %v, want %v", got.Hints.DoNotTouch, wantDoNotTouch)
+	}
+}
+
+func TestInitInsightsPruneUsesProjectRootWithNestedIndex(t *testing.T) {
+	for _, prune := range []bool{false, true} {
+		t.Run(fmt.Sprintf("prune=%v", prune), func(t *testing.T) {
+			indexPath, outputPath := newPruneFixture(t)
+
+			cmd := newInitInsightsCmd()
+			args := []string{"-i", indexPath, "-o", outputPath}
+			if prune {
+				args = append(args, "--prune")
+			}
+			cmd.SetArgs(args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("init-insights returned error: %v", err)
+			}
+
+			if prune {
+				assertHints(t, outputPath, []string{"CODE_VAR"}, []string{"migrations/"})
+			} else {
+				assertHints(t, outputPath, []string{"CODE_VAR", "GONE_VAR"}, []string{"migrations/", "missing/"})
+			}
+		})
+	}
+}
+
+func TestAISummaryPrunesHintsFromProjectRootWithNestedIndex(t *testing.T) {
+	indexPath, outputPath := newPruneFixture(t)
+	summaryPath := filepath.Join(t.TempDir(), "summary")
+	if err := os.WriteFile(summaryPath, []byte(`#!/bin/sh
+cat <<'JSON'
+{"purpose": {"root": "Entry point"}, "architecture": {"ai_summary": "A tiny program."}}
+JSON
+`), 0755); err != nil {
+		t.Fatalf("writing summary command: %v", err)
+	}
+	t.Setenv("STACKLIT_SUMMARY_CMD", summaryPath)
+
+	cmd := newAISummaryCmd()
+	cmd.SetArgs([]string{"-i", indexPath, "-o", outputPath})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("ai-summary returned error: %v", err)
+	}
+
+	assertHints(t, outputPath, []string{"CODE_VAR"}, []string{"migrations/"})
 }
 
 func restoreWorkingDirectory(t *testing.T, dir string) {

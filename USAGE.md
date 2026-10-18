@@ -228,7 +228,10 @@ stacklit generate-json
 
 `init-insights` creates or updates `stacklit-insights.json` with module purposes and hints while preserving existing edits. `ai-summary` asks the configured local agent to generate insights JSON, then updates module purposes, workflow hints, and `architecture.ai_summary` in the insights file.
 
-If `stacklit.json` is missing, `init-insights` runs the indexer in memory and creates `stacklit-insights.json` without writing `stacklit.json`. By default it preserves purpose entries for modules that no longer exist; use `--prune` to remove those stale purpose entries.
+If `stacklit.json` is missing, `init-insights` runs the indexer in memory and creates `stacklit-insights.json` without writing `stacklit.json`. By default it preserves purpose entries for modules that no longer exist; use `--prune` to remove those stale purpose entries, along with stale hints. `ai-summary` always applies the same pruning:
+
+- `do_not_touch` paths that no longer exist under the project root (the current directory, as scanned by `generate-json`) are removed. Glob entries are kept.
+- `env_vars` that no git-tracked file under the project root, submodules included, mentions as a whole word are removed. Stacklit's own outputs (the index, the insights file, configured output paths) and blocks injected by `stacklit derive` do not count as mentions. Outside a git repository, `env_vars` are left untouched. To keep a variable that only external systems consume, mention it in any tracked doc.
 
 ### Configure AI summaries
 

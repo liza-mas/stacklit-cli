@@ -162,14 +162,7 @@ func InjectIntoFile(path string, block string) error {
 
 	content := string(existing)
 
-	sIdx := strings.Index(content, startMarker)
-	eIdx := strings.Index(content, endMarker)
-
-	if sIdx >= 0 && eIdx >= 0 {
-		eIdx += len(endMarker)
-		if eIdx < len(content) && content[eIdx] == '\n' {
-			eIdx++
-		}
+	if sIdx, eIdx, ok := blockBounds(content); ok {
 		content = content[:sIdx] + block + content[eIdx:]
 	} else {
 		if len(content) > 0 {
@@ -184,6 +177,29 @@ func InjectIntoFile(path string, block string) error {
 	}
 
 	return os.WriteFile(path, []byte(content), 0644)
+}
+
+// StripBlock returns content without its injected stacklit block, if any.
+func StripBlock(content string) string {
+	if sIdx, eIdx, ok := blockBounds(content); ok {
+		return content[:sIdx] + content[eIdx:]
+	}
+	return content
+}
+
+// blockBounds locates the injected stacklit block, including the newline that
+// follows its end marker.
+func blockBounds(content string) (start, end int, ok bool) {
+	start = strings.Index(content, startMarker)
+	end = strings.Index(content, endMarker)
+	if start < 0 || end < 0 {
+		return 0, 0, false
+	}
+	end += len(endMarker)
+	if end < len(content) && content[end] == '\n' {
+		end++
+	}
+	return start, end, true
 }
 
 // formatModuleLine builds a single module line like:

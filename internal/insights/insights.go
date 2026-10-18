@@ -4,10 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strings"
 
+	"github.com/glincker/stacklit/internal/derive"
+	"github.com/glincker/stacklit/internal/git"
 	"github.com/glincker/stacklit/internal/hint"
 	"github.com/glincker/stacklit/internal/jsonfile"
 	"github.com/glincker/stacklit/internal/purpose"
@@ -139,6 +144,65 @@ func prunePurpose(purposes map[string]string, idx *schema.Index) {
 			delete(purposes, name)
 		}
 	}
+}
+
+// PruneHints removes do_not_touch paths that no longer exist under root and
+// env_vars that no tracked file mentions outside the root-relative exclude
+// paths and injected stacklit blocks. It keeps entries whenever existence or
+// references cannot be established: glob paths, stat errors other than
+// not-found, and any failure to search git or read a matching file.
+func PruneHints(file *File, root string, exclude []string) {
+	file.Hints.DoNotTouch = slices.DeleteFunc(file.Hints.DoNotTouch, func(p string) bool {
+		return pathMissing(root, p)
+	})
+
+	referenced, ok := referencedWords(root, file.Hints.EnvVars, exclude)
+	if !ok {
+		return
+	}
+	file.Hints.EnvVars = slices.DeleteFunc(file.Hints.EnvVars, func(name string) bool {
+		return !referenced[name]
+	})
+}
+
+func pathMissing(root, p string) bool {
+	if p == "" || strings.ContainsAny(p, "*?[") {
+		return false
+	}
+	path := filepath.FromSlash(p)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, path)
+	}
+	_, err := os.Stat(path)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// referencedWords reports which words appear as whole words in tracked files
+// under root once injected stacklit blocks are removed. ok is false when the
+// references cannot be established.
+func referencedWords(root string, words, exclude []string) (map[string]bool, bool) {
+	if len(words) == 0 {
+		return nil, false
+	}
+	candidates, err := git.FilesContainingWords(root, words, exclude)
+	if err != nil {
+		return nil, false
+	}
+
+	referenced := make(map[string]bool, len(words))
+	for _, rel := range candidates {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			return nil, false
+		}
+		text := derive.StripBlock(string(data))
+		for _, w := range words {
+			if !referenced[w] && regexp.MustCompile(`\b`+regexp.QuoteMeta(w)+`\b`).MatchString(text) {
+				referenced[w] = true
+			}
+		}
+	}
+	return referenced, true
 }
 
 func purposeMatchesIndex(name string, idx *schema.Index) bool {

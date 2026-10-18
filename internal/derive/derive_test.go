@@ -44,3 +44,19 @@ func TestCompactMapWithOptionsRequiresAISummaryWhenRequested(t *testing.T) {
 		t.Fatalf("expected ErrMissingAISummary, got %v", err)
 	}
 }
+
+func TestStripBlockRemovesInjectedBlockOnly(t *testing.T) {
+	idx := &schema.Index{
+		Project: schema.Project{Name: "demo"},
+		Hints:   schema.Hints{EnvVars: []string{"STALE_VAR"}},
+	}
+	content := "# Notes\n\n" + InjectableBlock(idx) + "Uses KEPT_VAR.\n"
+
+	got := StripBlock(content)
+	if want := "# Notes\n\nUses KEPT_VAR.\n"; got != want {
+		t.Fatalf("StripBlock = %q, want %q", got, want)
+	}
+	if plain := "no block here\n"; StripBlock(plain) != plain {
+		t.Fatalf("StripBlock changed content without a block")
+	}
+}
