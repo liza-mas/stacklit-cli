@@ -57,6 +57,16 @@ stacklit ai-summary
 stacklit generate-json
 ```
 
+`ai-summary` runs a local agent CLI, `claude` by default. To choose the agent for the shell session:
+
+```bash
+export STACKLIT_SUMMARY_CMD="claude -p --system-prompt"
+# or
+export STACKLIT_SUMMARY_CMD="codex exec --dangerously-bypass-approvals-and-sandbox"
+```
+
+See [Configure AI summaries](#configure-ai-summaries) for how the prompt and input are passed.
+
 `init-insights` creates `stacklit-insights.json` from the current index. `ai-summary` improves mechanically seeded module purposes and workflow hints, then updates the architecture summary in that insights file. The final `generate-json` rebuilds `stacklit.json` enriched with the curated insights.
 
 Skip `ai-summary` if you do not want AI-generated summaries.
@@ -256,7 +266,7 @@ STACKLIT_SUMMARY_CMD="claude -p --system-prompt" stacklit ai-summary
 STACKLIT_SUMMARY_CMD="codex exec --dangerously-bypass-approvals-and-sandbox" stacklit ai-summary
 ```
 
-For the default Claude command, insight-generation instructions are passed with `--system-prompt`. Stdin contains the compact JSON snapshot; when documentation is found, it is preceded by a `--- documentation excerpts ---` … `--- end documentation excerpts ---` block and a `--- Stacklit input JSON ---` line. Excerpts travel on stdin because Linux rejects any single argument of 128 KiB or more. Custom `STACKLIT_SUMMARY_CMD` prefixes receive the generated prompt as their final argument and must write the insights JSON object to stdout. The agent must support file reads to inspect repository evidence and perform the deferred reconciliation step.
+For the default Claude command, insight-generation instructions are passed with `--system-prompt`. Stdin contains the compact JSON snapshot; when documentation is found, it is preceded by a `--- documentation excerpts ---` … `--- end documentation excerpts ---` block and a `--- Stacklit input JSON ---` line. Excerpts travel on stdin because Linux rejects any single argument of 128 KiB or more. Custom `STACKLIT_SUMMARY_CMD` prefixes receive the generated prompt as their final argument and must write the insights JSON object to stdout. The exception is `codex exec`: it receives no prompt argument, and stdin carries the prompt, then any documentation excerpts, then the `--- Stacklit input JSON ---` line and the snapshot. The agent must support file reads to inspect repository evidence and perform the deferred reconciliation step.
 
 `STACKLIT_SUMMARY_CMD` is split on whitespace. Shell-style quoted arguments are not preserved, so prefer simple command lines or a small wrapper script for complex invocations.
 
